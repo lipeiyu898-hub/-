@@ -1,0 +1,5 @@
+{
+  "name": "叽叽记账",
+  "description": "可爱仓鼠主题的极简财务管理应用，支持智能识别和支出分析。",
+  "requestFramePermissions": ["microphone"]
+}
