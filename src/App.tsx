@@ -379,6 +379,15 @@ const toDateTimeLocal = (date: any) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
+declare global {
+  interface Window {
+    aistudio: {
+      hasSelectedApiKey: () => Promise<boolean>;
+      openSelectKey: () => Promise<void>;
+    };
+  }
+}
+
 const formatAmount = (amount: any) => {
   const val = typeof amount === 'number' ? amount : Number(amount);
   if (isNaN(val)) return '0.00';
@@ -2029,7 +2038,10 @@ const VoiceModal = ({ onClose, onSave, categories, uid }: { onClose: () => void,
         body: formData,
       });
       
-      if (!transcribeRes.ok) throw new Error('语音转文字失败');
+      if (!transcribeRes.ok) {
+        const errorData = await transcribeRes.json().catch(() => ({}));
+        throw new Error(errorData.error || '语音转文字失败');
+      }
       const { text } = await transcribeRes.json();
       setTranscript(text);
       
@@ -2046,7 +2058,10 @@ const VoiceModal = ({ onClose, onSave, categories, uid }: { onClose: () => void,
         body: JSON.stringify({ text, categories }),
       });
       
-      if (!parseRes.ok) throw new Error('解析账单失败');
+      if (!parseRes.ok) {
+        const errorData = await parseRes.json().catch(() => ({}));
+        throw new Error(errorData.error || '解析账单失败');
+      }
       const billData = await parseRes.json();
       setDetectedData(billData);
     } catch (err: any) {
@@ -2260,7 +2275,10 @@ const ScreenshotModal = ({ onClose, onSave, categories }: { onClose: () => void,
         body: JSON.stringify({ image: base64Data, categories }),
       });
       
-      if (!response.ok) throw new Error('识别小票失败');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || '识别小票失败');
+      }
       const data = await response.json();
       
       setTitle(data.title || '未命名商户');
@@ -2277,9 +2295,9 @@ const ScreenshotModal = ({ onClose, onSave, categories }: { onClose: () => void,
           setDate(parsedDate);
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Recognition failed:", err);
-      setError("识别失败，请手动调整或重试。");
+      setError(err.message || "识别失败，请手动调整或重试。");
       setSelectedCategory('other');
     } finally {
       setIsScanning(false);

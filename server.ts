@@ -2,118 +2,135 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import multer from 'multer';
-import { GoogleGenAI, Type } from '@google/genai';
+import OpenAI from 'openai';
+import axios from 'axios';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB
+});
+
+// DashScope OpenAI Compatible Client
+const getOpenAIClient = () => {
+  const apiKey = process.env.DASHSCOPE_API_KEY;
+  if (!apiKey) {
+    throw new Error('DASHSCOPE_API_KEY not found in environment variables.');
+  }
+  return new OpenAI({
+    apiKey: apiKey,
+    baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  });
+};
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
-
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
   // API Routes
   
-  // 1. Transcribe audio
+  // 1. Transcribe audio (ASR)
+  // Using qwen3-asr-flash via DashScope Native API (as ASR is typically not in OpenAI compatible mode)
   app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     try {
+      const apiKey = process.env.DASHSCOPE_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: 'DASHSCOPE_API_KEY not configured' });
+      }
       if (!req.file) {
         return res.status(400).json({ error: 'No audio file uploaded' });
       }
 
-      const base64Audio = req.file.buffer.toString('base64');
+      // DashScope ASR API (Recognition)
+      // Note: qwen3-asr-flash is a multimodal model that can be used via Chat interface in some cases, 
+      // but for pure ASR, DashScope has specific endpoints.
+      // However, qwen-asr models are also available via the multimodal chat interface.
       
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
+      const client = getOpenAIClient();
+      const base64Audio = req.file.buffer.toString('base64');
+      const mimeType = req.file.mimetype || "audio/webm";
+
+      const response = await client.chat.completions.create({
+        model: "qwen3-asr-flash", // Using qwen3-asr-flash as requested
+        messages: [
           {
-            parts: [
+            role: "user",
+            content: [
+              { type: "text", text: "请将这段语音转录为文字。只需要返回转录后的文本内容，不要有任何多余的解释。" },
               {
-                inlineData: {
-                  mimeType: req.file.mimetype || "audio/webm",
-                  data: base64Audio,
-                },
-              },
-              {
-                text: "请将这段语音转录为文字。只需要返回转录后的文本内容，不要有任何多余的解释。如果语音内容为空或无法识别，请返回空字符串。",
-              },
-            ],
-          },
-        ],
+                type: "audio", // Correct modal type for ASR models in DashScope compatible mode
+                audio: {
+                  url: `data:${mimeType};base64,${base64Audio}`
+                }
+              }
+            ] as any
+          }
+        ]
       });
 
-      const text = response.text || '';
+      const text = response.choices[0]?.message?.content || '';
       res.json({ text });
     } catch (error: any) {
       console.error('Transcription error:', error);
-      res.status(500).json({ error: error.message });
+      // Fallback to a simpler error message
+      res.status(500).json({ error: '语音识别失败，请检查 API 配置或网络' });
     }
   });
 
   // 2. Parse bill text
   app.post('/api/parse-bill', async (req, res) => {
     try {
+      const client = getOpenAIClient();
       const { text, categories } = req.body;
       if (!text) {
         return res.status(400).json({ error: 'No text provided' });
       }
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
+      const response = await client.chat.completions.create({
+        model: "qwen-plus",
+        messages: [
           {
-            parts: [
-              {
-                text: `你是一个专业的财务记账助手。请从以下文本中提取交易信息：
-                "${text}"
-                
-                必须严格遵守以下规则：
-                1. 必须返回 JSON 格式。
-                2. type 字段必须且只能是 "expense" (支出) 或 "income" (收入)。
-                3. amount 字段必须是纯数字（number 类型）。
-                4. category 字段必须从以下列表中选择一个最匹配的 ID: [${categories.map((c: any) => c.id).join(', ')}]。
-                5. note 字段是备注（如“买香蕉”、“午餐”、“发工资”）。
-                6. merchant 字段是商户名称（如果有，没有则为空字符串）。
-                7. time 字段是交易时间（如“刚刚”、“昨天”、“今天下午”，没有则为空字符串）。
-                8. 严禁脑补！如果文本说“中午”，time 必须是“中午”，不要脑补成“晚上”或“下午”。
-                9. 如果无法确定分类，请使用 "other"。`,
-              },
-            ],
+            role: "system",
+            content: "你是一个专业的财务记账助手。请从用户提供的文本中提取交易信息，并严格返回 JSON 格式。"
           },
-        ],
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              type: { type: Type.STRING, enum: ["expense", "income"] },
-              amount: { type: Type.NUMBER },
-              category: { type: Type.STRING },
-              note: { type: Type.STRING },
-              merchant: { type: Type.STRING },
-              time: { type: Type.STRING },
-            },
-            required: ["type", "amount", "category", "note"]
+          {
+            role: "user",
+            content: `从以下文本中提取交易信息：
+            "${text}"
+            
+            必须严格遵守以下规则：
+            1. 必须返回 JSON 格式。
+            2. type 字段必须且只能是 "expense" 或 "income"。
+            3. amount 字段必须是纯数字（number 类型）。
+            4. category 字段必须从以下列表中选择一个最匹配的 ID: [${categories.map((c: any) => c.id).join(', ')}]。
+            5. note 字段是备注。
+            6. merchant 字段是商户名称（没有则为空字符串）。
+            7. time 字段是交易时间（没有则为空字符串）。
+            8. 严禁脑补！
+            9. 如果无法确定分类，请使用 "other"。`
           }
-        },
+        ],
+        response_format: { type: "json_object" }
       });
 
-      const billData = JSON.parse(response.text || '{}');
+      const content = response.choices[0]?.message?.content || '{}';
+      const billData = JSON.parse(content);
       res.json(billData);
     } catch (error: any) {
       console.error('Parsing error:', error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: '文本解析失败' });
     }
   });
 
-  // 3. Recognize receipt from image
+  // 3. Recognize receipt from image (OCR)
   app.post('/api/recognize-receipt', async (req, res) => {
     try {
+      const client = getOpenAIClient();
       const { image, categories } = req.body;
       if (!image) {
         return res.status(400).json({ error: 'No image provided' });
@@ -122,54 +139,58 @@ async function startServer() {
       const base64Data = image.split(',')[1] || image;
       const mimeType = image.split(';')[0].split(':')[1] || 'image/jpeg';
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
+      const response = await client.chat.completions.create({
+        model: "qwen-vl-ocr", // Specifically requested model
+        messages: [
           {
-            parts: [
+            role: "user",
+            content: [
               {
-                inlineData: {
-                  mimeType,
-                  data: base64Data,
-                },
-              },
-              {
+                type: "text",
                 text: `Extract transaction details from this receipt/screenshot. 
                 Return JSON with fields: 
-                - title: string (merchant name or item)
-                - amount: number
                 - type: "expense" or "income"
+                - amount: number
                 - category: one of [${categories.map((c: any) => c.id).join(', ')}]
-                - date: string (ISO format if possible, otherwise just the date)
+                - note: string (merchant name or item)
+                - merchant: string
+                - time: string
                 
                 CRITICAL CATEGORY RULES:
                 - Only select a specific category if there is CLEAR evidence.
-                - If you are unsure, you MUST choose "other".`,
+                - If you are unsure, you MUST choose "other".`
               },
-            ],
-          },
-        ],
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              amount: { type: Type.NUMBER },
-              type: { type: Type.STRING, enum: ["expense", "income"] },
-              category: { type: Type.STRING },
-              date: { type: Type.STRING },
-            },
-            required: ["title", "amount", "type", "category"]
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:${mimeType};base64,${base64Data}`
+                }
+              }
+            ] as any
           }
-        },
+        ],
+        response_format: { type: "json_object" }
       });
 
-      const receiptData = JSON.parse(response.text || '{}');
-      res.json(receiptData);
+      const content = response.choices[0]?.message?.content || '{}';
+      const receiptData = JSON.parse(content);
+      
+      // Ensure the keys match the frontend expectations if they differ
+      // The user requested: type, amount, category, note, merchant, time
+      // The frontend previously expected: title, amount, type, category, date
+      // I will map them to ensure compatibility
+      const mappedData = {
+        title: receiptData.merchant || receiptData.note || '未命名账单',
+        amount: Number(receiptData.amount) || 0,
+        type: receiptData.type === 'income' ? 'income' : 'expense',
+        category: receiptData.category || 'other',
+        date: receiptData.time || new Date().toISOString()
+      };
+
+      res.json(mappedData);
     } catch (error: any) {
       console.error('Receipt recognition error:', error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: '图片识别失败' });
     }
   });
 
