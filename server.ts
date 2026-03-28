@@ -51,33 +51,34 @@ async function startServer() {
       // but for pure ASR, DashScope has specific endpoints.
       // However, qwen-asr models are also available via the multimodal chat interface.
       
-      const client = getOpenAIClient();
+      // Using native DashScope ASR API for better stability
       const base64Audio = req.file.buffer.toString('base64');
       const mimeType = req.file.mimetype || "audio/webm";
 
-      const response = await client.chat.completions.create({
-        model: "qwen3-asr-flash", // Using qwen3-asr-flash as requested
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: "请将这段语音转录为文字。只需要返回转录后的文本内容，不要有任何多余的解释。" },
-              {
-                type: "audio", // Correct modal type for ASR models in DashScope compatible mode
-                audio: {
-                  url: `data:${mimeType};base64,${base64Audio}`
-                }
-              }
-            ] as any
+      const response = await axios.post(
+        'https://dashscope.aliyuncs.com/api/v1/services/audio/asr/recognition',
+        {
+          model: 'qwen-asr-v1',
+          input: {
+            audio_resource: `data:${mimeType};base64,${base64Audio}`
+          },
+          parameters: {
+            sample_rate: 16000,
+            format: mimeType.includes('webm') ? 'webm' : 'wav'
           }
-        ]
-      });
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
 
-      const text = response.choices[0]?.message?.content || '';
+      const text = response.data.output?.sentence?.[0]?.text || '';
       res.json({ text });
     } catch (error: any) {
-      console.error('Transcription error:', error);
-      // Fallback to a simpler error message
+      console.error('Transcription error details:', error.response?.data || error.message || error);
       res.status(500).json({ error: '语音识别失败，请检查 API 配置或网络' });
     }
   });
@@ -122,7 +123,7 @@ async function startServer() {
       const billData = JSON.parse(content);
       res.json(billData);
     } catch (error: any) {
-      console.error('Parsing error:', error);
+      console.error('Parsing error details:', error.response?.data || error.message || error);
       res.status(500).json({ error: '文本解析失败' });
     }
   });
@@ -140,7 +141,7 @@ async function startServer() {
       const mimeType = image.split(';')[0].split(':')[1] || 'image/jpeg';
 
       const response = await client.chat.completions.create({
-        model: "qwen-vl-ocr", // Specifically requested model
+        model: "qwen-vl-plus", // Switch to plus for better stability and general capability
         messages: [
           {
             role: "user",
@@ -148,7 +149,7 @@ async function startServer() {
               {
                 type: "text",
                 text: `Extract transaction details from this receipt/screenshot. 
-                Return JSON with fields: 
+                Return ONLY a JSON object with fields: 
                 - type: "expense" or "income"
                 - amount: number
                 - category: one of [${categories.map((c: any) => c.id).join(', ')}]
@@ -168,12 +169,13 @@ async function startServer() {
               }
             ] as any
           }
-        ],
-        response_format: { type: "json_object" }
+        ]
       });
 
       const content = response.choices[0]?.message?.content || '{}';
-      const receiptData = JSON.parse(content);
+      // Clean content if it has markdown code blocks
+      const jsonStr = content.replace(/```json\n?|```/g, '').trim();
+      const receiptData = JSON.parse(jsonStr);
       
       // Ensure the keys match the frontend expectations if they differ
       // The user requested: type, amount, category, note, merchant, time
@@ -189,7 +191,7 @@ async function startServer() {
 
       res.json(mappedData);
     } catch (error: any) {
-      console.error('Receipt recognition error:', error);
+      console.error('Receipt recognition error details:', error.response?.data || error.message || error);
       res.status(500).json({ error: '图片识别失败' });
     }
   });
