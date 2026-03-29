@@ -42,7 +42,14 @@ import {
   Dumbbell,
   Briefcase,
   Users,
-  LucideIcon
+  LucideIcon,
+  Mail,
+  Lock,
+  Phone,
+  Smartphone,
+  ArrowLeft,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -58,13 +65,19 @@ import {
 import { cn } from './lib/utils';
 import { MOCK_TRANSACTIONS, CATEGORIES } from './constants';
 import { Transaction, TransactionType, Category } from './types';
-import { auth, db } from './firebase';
+import JijiLogo from './components/JijiLogo';
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
   GoogleAuthProvider, 
   signOut,
-  User as FirebaseUser
+  User as FirebaseUser,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  ConfirmationResult,
+  updateProfile
 } from 'firebase/auth';
 import { 
   collection, 
@@ -206,37 +219,7 @@ const BottomNav = ({ activeTab, onTabChange }: { activeTab: string, onTabChange:
   );
 };
 
-const JijiLogo = ({ className, size = "text-lg" }: { className?: string, size?: string }) => (
-  <div className={cn("relative inline-flex items-center", className)}>
-    {/* Accent marks */}
-    <div className="absolute -top-1 -left-2 flex gap-0.5 rotate-[-15deg]">
-      <div className="w-1 h-2.5 bg-[#F2994A] rounded-full" />
-      <div className="w-1 h-1.5 bg-[#F2994A] rounded-full mt-1" />
-    </div>
-    <span 
-      className={cn(
-        "font-headline font-black text-white tracking-tight",
-        size
-      )}
-      style={{
-        textShadow: `
-          -2px -2px 0 #F2994A,  
-           2px -2px 0 #F2994A,
-          -2px  2px 0 #F2994A,
-           2px  2px 0 #F2994A,
-          -3px  0px 0 #F2994A,
-           3px  0px 0 #F2994A,
-           0px -3px 0 #F2994A,
-           0px  3px 0 #F2994A,
-           0 4px 6px rgba(242, 153, 74, 0.2)
-        `,
-        letterSpacing: '-0.02em'
-      }}
-    >
-      叽叽记账
-    </span>
-  </div>
-);
+// JijiLogo component is now imported from ./components/JijiLogo.tsx
 
 const Header = ({ title, showMenu = true, onMenuClick, userAvatar, onAvatarClick }: { title: string, showMenu?: boolean, onMenuClick?: () => void, userAvatar: string, onAvatarClick: () => void }) => (
   <header className="absolute top-10 w-full flex items-center px-6 h-16 glass-effect z-50">
@@ -271,7 +254,7 @@ const Header = ({ title, showMenu = true, onMenuClick, userAvatar, onAvatarClick
   </header>
 );
 
-const Sidebar = ({ isOpen, onClose, onNavigate }: { isOpen: boolean, onClose: () => void, onNavigate: (tab: string) => void }) => {
+const Sidebar = ({ isOpen, onClose, onNavigate, userName, userAvatar }: { isOpen: boolean, onClose: () => void, onNavigate: (tab: string) => void, userName: string, userAvatar: string }) => {
   const menuItems = [
     { id: 'overview', label: '首页概览', icon: LayoutGrid },
     { id: 'bills', label: '账单明细', icon: ReceiptText },
@@ -324,14 +307,14 @@ const Sidebar = ({ isOpen, onClose, onNavigate }: { isOpen: boolean, onClose: ()
               <div className="flex items-center gap-3 p-2">
                 <div className="w-10 h-10 rounded-full overflow-hidden bg-surface-container-highest">
                   <img 
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuChLhrZh8o1NDMYLLcgiJxLNhEcvbZHTO9UE8WAuwPr7zgsqof0c_IpPnr0cd1kYJ16zSKeS93UuzlA02uDC0If-Fp7LHT_W9T8pThnfngHEY7H3eEELhlRi9otIqfwGdsMUaZqmORQCAye9D_ewkiDY8lncSYhcJGrACpBZ_ADp4nMLllrXM-ylebUPRLxL-QZvN7I4oys6cVpyknSh1FwHm5WDwXUnYZFRVOgF3AkhwzjNylQ5Iyr5LEk47ie4XtEJPpu48zb0Do3" 
+                    src={userAvatar} 
                     alt="Avatar" 
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"
                   />
                 </div>
                 <div>
-                  <p className="font-bold text-sm">叽叽</p>
+                  <p className="font-bold text-sm">{userName}</p>
                   <p className="text-[10px] text-on-surface-variant/60 font-medium">Alita Premium</p>
                 </div>
               </div>
@@ -1512,12 +1495,15 @@ const ProfileScreen = ({
       component: (
         <div className="space-y-8 text-center pt-8">
           <div className="flex flex-col items-center gap-4">
-            <div className="w-20 h-20 rounded-3xl overflow-hidden shadow-xl shadow-primary/10">
+            <div className="w-20 h-20 rounded-3xl overflow-hidden shadow-xl shadow-primary/10 bg-white flex items-center justify-center">
               <img 
-                src="https://picsum.photos/seed/hamster_accounting_logo_final/400/400" 
+                src="https://ais-pre-qku6gadykrirhc6fuikqpw-489700228125.us-east1.run.app/logo.png" 
                 alt="App Logo" 
-                className="w-full h-full object-cover"
+                className="w-16 h-16 object-contain"
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = '/logo.png';
+                }}
               />
             </div>
             <div>
@@ -2614,6 +2600,17 @@ function AppContent() {
   const [budget, setBudget] = useState(5000);
   const [loginError, setLoginError] = useState<string | null>(null);
 
+  // Login states
+  const [loginMode, setLoginMode] = useState<'google' | 'email' | 'register' | 'phone'>('google');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -2635,28 +2632,37 @@ function AppContent() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const billsData = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          date: data.date instanceof Timestamp ? data.date.toDate() : new Date(data.date)
-        } as Transaction;
-      });
+      const billsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        date: (doc.data().date as Timestamp).toDate()
+      })) as Transaction[];
       setTransactions(billsData);
     }, (error) => {
-      console.error("Firestore sync error:", error);
+      console.error("Fetch bills failed:", error);
     });
 
     return () => unsubscribe();
   }, [user]);
 
-  const handleLogin = async () => {
+  const setupRecaptcha = () => {
+    if (!(window as any).recaptchaVerifier) {
+      (window as any).recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        'size': 'invisible',
+        'callback': () => {
+          // reCAPTCHA solved, allow signInWithPhoneNumber.
+        }
+      });
+    }
+  };
+
+  const handleGoogleLogin = async () => {
     if (!auth) {
       setLoginError("Firebase Auth 未初始化，请刷新页面。");
       return;
     }
     try {
+      setIsLoading(true);
       setLoginError(null);
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
@@ -2667,16 +2673,121 @@ function AppContent() {
         message = "登录窗口被浏览器拦截，请允许弹出窗口后重试。";
       } else if (error.code === 'auth/network-request-failed') {
         message = "网络连接失败，请检查您的网络设置。";
-      } else if (error.code === 'auth/unauthorized-domain') {
-        message = "当前域名未在 Firebase 控制台允许列表中，请联系管理员。";
-      } else if (error.code === 'auth/operation-not-allowed') {
-        message = "Google 登录未在 Firebase 控制台中启用。";
-      } else if (error.code === 'auth/popup-closed-by-user') {
-        message = "登录窗口已关闭，请重试。";
-      } else if (error.code === 'auth/cancelled-popup-request') {
-        message = "登录请求已取消。";
       }
       setLoginError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) {
+      setLoginError("请输入邮箱和密码。");
+      return;
+    }
+    try {
+      setIsLoading(true);
+      setLoginError(null);
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error: any) {
+      console.error("Email login failed:", error);
+      let message = "登录失败，请检查邮箱和密码。";
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        message = "邮箱或密码错误。";
+      } else if (error.code === 'auth/invalid-email') {
+        message = "邮箱格式不正确。";
+      }
+      setLoginError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEmailRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) {
+      setLoginError("请输入邮箱和密码。");
+      return;
+    }
+    if (password.length < 6) {
+      setLoginError("密码长度至少为 6 位。");
+      return;
+    }
+    try {
+      setIsLoading(true);
+      setLoginError(null);
+      await createUserWithEmailAndPassword(auth, email, password);
+    } catch (error: any) {
+      console.error("Registration failed:", error);
+      let message = "注册失败，请重试。";
+      if (error.code === 'auth/email-already-in-use') {
+        message = "该邮箱已被注册。";
+      } else if (error.code === 'auth/invalid-email') {
+        message = "邮箱格式不正确。";
+      } else if (error.code === 'auth/weak-password') {
+        message = "密码强度太弱。";
+      }
+      setLoginError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSendCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!phoneNumber) {
+      setLoginError("请输入手机号。");
+      return;
+    }
+    // Simple phone format check (e.g., +8613800138000)
+    if (!phoneNumber.startsWith('+')) {
+      setLoginError("请输入带国家代码的手机号（例如：+8613800138000）。");
+      return;
+    }
+    try {
+      setIsLoading(true);
+      setLoginError(null);
+      setupRecaptcha();
+      const appVerifier = (window as any).recaptchaVerifier;
+      const result = await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
+      setConfirmationResult(result);
+      setIsVerifying(true);
+    } catch (error: any) {
+      console.error("SMS send failed:", error);
+      let message = "验证码发送失败，请重试。";
+      if (error.code === 'auth/invalid-phone-number') {
+        message = "手机号格式不正确。";
+      } else if (error.code === 'auth/too-many-requests') {
+        message = "请求过于频繁，请稍后再试。";
+      }
+      setLoginError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!verificationCode || !confirmationResult) {
+      setLoginError("请输入验证码。");
+      return;
+    }
+    try {
+      setIsLoading(true);
+      setLoginError(null);
+      await confirmationResult.confirm(verificationCode);
+    } catch (error: any) {
+      console.error("Verification failed:", error);
+      let message = "验证码错误，请重试。";
+      if (error.code === 'auth/invalid-verification-code') {
+        message = "验证码不正确。";
+      } else if (error.code === 'auth/code-expired') {
+        message = "验证码已过期，请重新获取。";
+      }
+      setLoginError(message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -2687,6 +2798,29 @@ function AppContent() {
       window.location.reload();
     } catch (error) {
       console.error("Logout failed:", error);
+    }
+  };
+
+  const handleUpdateUserName = async (newName: string) => {
+    if (!user) return;
+    try {
+      await updateProfile(user, { displayName: newName });
+      // updateProfile doesn't trigger onAuthStateChanged in some Firebase versions, 
+      // so we manually refresh the user object or just rely on the next auth state change.
+      // Actually, we can just force a state update by creating a new object.
+      setUser({ ...user, displayName: newName } as FirebaseUser);
+    } catch (error) {
+      console.error("Update name failed:", error);
+    }
+  };
+
+  const handleUpdateUserAvatar = async (newAvatar: string) => {
+    if (!user) return;
+    try {
+      await updateProfile(user, { photoURL: newAvatar });
+      setUser({ ...user, photoURL: newAvatar } as FirebaseUser);
+    } catch (error) {
+      console.error("Update avatar failed:", error);
     }
   };
 
@@ -2767,26 +2901,207 @@ function AppContent() {
   if (!user) {
     return (
       <div className="min-h-screen bg-zinc-100 flex justify-center items-center p-0 sm:p-4 md:p-8">
-        <div className="relative w-full max-w-[440px] h-full sm:h-[952px] bg-background overflow-hidden sm:rounded-[3.5rem] sm:shadow-[0_0_0_12px_#1a1a1a,0_20px_50px_rgba(0,0,0,0.3)] flex flex-col items-center justify-center p-8 text-center space-y-8">
-          <div className="w-24 h-24 bg-primary/10 rounded-[2rem] flex items-center justify-center text-primary mb-4">
-            <Wallet size={48} />
-          </div>
-          <JijiLogo size="text-4xl" />
-          <p className="text-on-surface-variant font-medium">欢迎使用叽叽记账，请登录以同步您的账单数据。</p>
+        <div className="relative w-full max-w-[440px] h-full sm:h-[952px] bg-background overflow-hidden sm:rounded-[3.5rem] sm:shadow-[0_0_0_12px_#1a1a1a,0_20px_50px_rgba(0,0,0,0.3)] flex flex-col items-center justify-center p-8 text-center space-y-6">
+          <div id="recaptcha-container"></div>
           
-          {loginError && (
-            <div className="w-full p-4 bg-error-container text-error rounded-2xl text-sm font-medium animate-in fade-in slide-in-from-top-2">
-              {loginError}
-            </div>
-          )}
+          <div className="w-20 h-20 bg-primary/10 rounded-[2rem] flex items-center justify-center text-primary mb-2">
+            <Wallet size={40} />
+          </div>
+          <JijiLogo size="text-3xl" />
+          
+          <div className="w-full space-y-4">
+            {loginError && (
+              <div className="w-full p-4 bg-error-container text-error rounded-2xl text-sm font-medium animate-in fade-in slide-in-from-top-2">
+                {loginError}
+              </div>
+            )}
 
-          <button 
-            onClick={handleLogin}
-            className="w-full py-4 bg-primary text-white rounded-full font-bold shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-transform"
-          >
-            <LucideIcons.LogIn size={20} />
-            使用 Google 账号登录
-          </button>
+            {loginMode === 'google' && (
+              <div className="space-y-4">
+                <p className="text-on-surface-variant font-medium text-sm">欢迎使用叽叽记账，请登录以同步您的账单数据。</p>
+                <button 
+                  onClick={handleGoogleLogin}
+                  disabled={isLoading}
+                  className="w-full py-4 bg-primary text-white rounded-full font-bold shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50"
+                >
+                  {isLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <LucideIcons.LogIn size={20} />}
+                  使用 Google 账号登录
+                </button>
+                
+                <div className="flex items-center gap-4 py-2">
+                  <div className="flex-1 h-px bg-outline-variant" />
+                  <span className="text-xs text-on-surface-variant/60 font-bold uppercase tracking-widest">或者使用</span>
+                  <div className="flex-1 h-px bg-outline-variant" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button 
+                    onClick={() => setLoginMode('email')}
+                    className="py-4 bg-surface-container-low text-on-surface rounded-3xl font-bold flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform border border-outline-variant"
+                  >
+                    <Mail size={20} className="text-primary" />
+                    <span className="text-xs">邮箱登录</span>
+                  </button>
+                  <button 
+                    onClick={() => setLoginMode('phone')}
+                    className="py-4 bg-surface-container-low text-on-surface rounded-3xl font-bold flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform border border-outline-variant"
+                  >
+                    <Smartphone size={20} className="text-secondary" />
+                    <span className="text-xs">手机登录</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {(loginMode === 'email' || loginMode === 'register') && (
+              <form onSubmit={loginMode === 'email' ? handleEmailLogin : handleEmailRegister} className="space-y-4 text-left">
+                <div className="flex items-center gap-2 mb-2">
+                  <button type="button" onClick={() => setLoginMode('google')} className="p-2 hover:bg-surface-container rounded-full">
+                    <ArrowLeft size={20} />
+                  </button>
+                  <h2 className="text-xl font-bold font-headline">{loginMode === 'email' ? '邮箱登录' : '创建账号'}</h2>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-on-surface-variant ml-1">邮箱地址</label>
+                    <div className="relative">
+                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40" size={18} />
+                      <input 
+                        type="email" 
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="your@email.com"
+                        className="w-full pl-12 pr-4 py-4 bg-surface-container-low rounded-2xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all font-medium"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-on-surface-variant ml-1">密码</label>
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40" size={18} />
+                      <input 
+                        type={showPassword ? "text" : "password"} 
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full pl-12 pr-12 py-4 bg-surface-container-low rounded-2xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all font-medium"
+                        required
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40 hover:text-on-surface"
+                      >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <button 
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-4 bg-primary text-white rounded-full font-bold shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50 mt-4"
+                >
+                  {isLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : null}
+                  {loginMode === 'email' ? '立即登录' : '注册账号'}
+                </button>
+
+                <p className="text-center text-sm text-on-surface-variant">
+                  {loginMode === 'email' ? '还没有账号？' : '已有账号？'}
+                  <button 
+                    type="button" 
+                    onClick={() => setLoginMode(loginMode === 'email' ? 'register' : 'email')}
+                    className="text-primary font-bold ml-1"
+                  >
+                    {loginMode === 'email' ? '立即注册' : '返回登录'}
+                  </button>
+                </p>
+              </form>
+            )}
+
+            {loginMode === 'phone' && (
+              <div className="space-y-4 text-left">
+                <div className="flex items-center gap-2 mb-2">
+                  <button type="button" onClick={() => { setLoginMode('google'); setIsVerifying(false); }} className="p-2 hover:bg-surface-container rounded-full">
+                    <ArrowLeft size={20} />
+                  </button>
+                  <h2 className="text-xl font-bold font-headline">手机登录</h2>
+                </div>
+
+                {!isVerifying ? (
+                  <form onSubmit={handleSendCode} className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-on-surface-variant ml-1">手机号码</label>
+                      <div className="relative">
+                        <Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40" size={18} />
+                        <input 
+                          type="tel" 
+                          value={phoneNumber}
+                          onChange={(e) => setPhoneNumber(e.target.value)}
+                          placeholder="+8613800138000"
+                          className="w-full pl-12 pr-4 py-4 bg-surface-container-low rounded-2xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all font-medium"
+                          required
+                        />
+                      </div>
+                      <p className="text-[10px] text-on-surface-variant/60 ml-1">请包含国家代码，例如中国手机号：+86138...</p>
+                    </div>
+
+                    <button 
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full py-4 bg-primary text-white rounded-full font-bold shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50"
+                    >
+                      {isLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : null}
+                      发送验证码
+                    </button>
+                  </form>
+                ) : (
+                  <form onSubmit={handleVerifyCode} className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-on-surface-variant ml-1">验证码</label>
+                      <div className="relative">
+                        <CheckCircle2 className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40" size={18} />
+                        <input 
+                          type="text" 
+                          value={verificationCode}
+                          onChange={(e) => setVerificationCode(e.target.value)}
+                          placeholder="输入 6 位验证码"
+                          className="w-full pl-12 pr-4 py-4 bg-surface-container-low rounded-2xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all font-medium text-center tracking-[0.5em] text-lg"
+                          maxLength={6}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <button 
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full py-4 bg-primary text-white rounded-full font-bold shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50"
+                    >
+                      {isLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : null}
+                      确认登录
+                    </button>
+
+                    <button 
+                      type="button"
+                      onClick={() => setIsVerifying(false)}
+                      className="w-full text-center text-sm text-primary font-bold"
+                    >
+                      重新发送验证码
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
+          </div>
+          
+          <p className="text-[10px] text-on-surface-variant/40 font-medium">
+            登录即代表您同意我们的 <span className="underline">服务协议</span> 和 <span className="underline">隐私政策</span>
+          </p>
         </div>
       </div>
     );
@@ -2816,7 +3131,13 @@ function AppContent() {
           userAvatar={user.photoURL || 'https://picsum.photos/seed/hamster_cute_user/200/200'}
           onAvatarClick={() => setActiveTab('profile')}
         />
-        <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} onNavigate={setActiveTab} />
+        <Sidebar 
+          isOpen={isSidebarOpen} 
+          onClose={() => setIsSidebarOpen(false)} 
+          onNavigate={setActiveTab} 
+          userName={user.displayName || '叽叽'}
+          userAvatar={user.photoURL || 'https://picsum.photos/seed/hamster_cute_user/200/200'}
+        />
         
         <main className="flex-1 overflow-y-auto no-scrollbar relative">
           <AnimatePresence mode="wait">
@@ -2857,9 +3178,9 @@ function AppContent() {
                   setCategories={setCategories} 
                   transactions={transactions}
                   userName={user.displayName || '叽叽'}
-                  setUserName={() => {}} // Read-only for now
+                  setUserName={handleUpdateUserName}
                   userAvatar={user.photoURL || 'https://picsum.photos/seed/hamster_cute_user/200/200'}
-                  setUserAvatar={() => {}} // Read-only for now
+                  setUserAvatar={handleUpdateUserAvatar}
                   budget={budget}
                   setBudget={setBudget}
                   onLogout={handleLogout}
