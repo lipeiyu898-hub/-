@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@types/express": "^5.0.6",
-    "@types/multer": "^2.1.0",
     "@types/node": "^25.5.0",
     "axios": "^1.14.0",
     "clsx": "^2.1.1",

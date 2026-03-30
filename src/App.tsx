@@ -52,6 +52,7 @@ import {
   EyeOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+// import { GoogleGenAI, Type } from "@google/genai"; // Removed Gemini
 import { 
   LineChart, 
   Line, 
@@ -66,6 +67,8 @@ import { cn } from './lib/utils';
 import { MOCK_TRANSACTIONS, CATEGORIES } from './constants';
 import { Transaction, TransactionType, Category } from './types';
 import JijiLogo from './components/JijiLogo';
+import HamsterSuccessOverlay from './components/HamsterSuccessOverlay';
+import { auth, db } from './firebase';
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
@@ -230,12 +233,14 @@ const Header = ({ title, showMenu = true, onMenuClick, userAvatar, onAvatarClick
         </button>
       ) : <div className="w-6" />}
     </div>
-    <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center">
-      {title === '叽叽记账' ? (
-        <JijiLogo size="text-xl" />
-      ) : (
-        <h1 className="text-lg font-bold text-[#2D2D2D] font-headline tracking-tight">{title}</h1>
-      )}
+    <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center gap-2">
+      {title === '叽叽记账' && <JijiLogo size="h-8" />}
+      <h1 className={cn(
+        "text-xl font-bold tracking-tight transition-all duration-300",
+        title === '叽叽记账' ? "font-cute text-primary text-2xl drop-shadow-sm" : "text-on-surface font-headline"
+      )}>
+        {title}
+      </h1>
     </div>
     <div className="flex-1" />
     <div className="flex items-center gap-3 z-10">
@@ -281,10 +286,10 @@ const Sidebar = ({ isOpen, onClose, onNavigate, userName, userAvatar }: { isOpen
             className="fixed top-0 left-0 bottom-0 w-[280px] bg-background z-[160] shadow-2xl flex flex-col p-8"
           >
             <div className="flex items-center gap-4 mb-12">
-              <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-white shadow-lg shadow-primary/20">
-                <Wallet size={24} />
+              <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-white shadow-lg shadow-primary/20 overflow-hidden">
+                <JijiLogo size="h-10" />
               </div>
-              <JijiLogo size="text-2xl" />
+              <span className="font-cute text-primary text-2xl font-bold">叽叽记账</span>
             </div>
 
             <nav className="flex-1 space-y-2">
@@ -376,6 +381,9 @@ const formatAmount = (amount: any) => {
   if (isNaN(val)) return '0.00';
   return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
+
+// --- Gemini AI Service ---
+// Removed getGeminiClient
 
 const TransactionItem = ({ 
   transaction, 
@@ -1495,19 +1503,11 @@ const ProfileScreen = ({
       component: (
         <div className="space-y-8 text-center pt-8">
           <div className="flex flex-col items-center gap-4">
-            <div className="w-20 h-20 rounded-3xl overflow-hidden shadow-xl shadow-primary/10 bg-white flex items-center justify-center">
-              <img 
-                src="https://ais-pre-qku6gadykrirhc6fuikqpw-489700228125.us-east1.run.app/logo.png" 
-                alt="App Logo" 
-                className="w-16 h-16 object-contain"
-                referrerPolicy="no-referrer"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/logo.png';
-                }}
-              />
+            <div className="w-24 h-24 rounded-3xl overflow-hidden shadow-xl shadow-primary/10 bg-white flex items-center justify-center">
+              <JijiLogo size="h-20 w-20" />
             </div>
             <div>
-              <JijiLogo size="text-2xl" />
+              <h2 className="text-2xl font-cute text-primary font-bold">叽叽记账</h2>
               <p className="text-xs text-on-surface-variant/60 font-medium mt-1">Version 2.4.0 (Build 1024)</p>
             </div>
           </div>
@@ -2015,40 +2015,38 @@ const VoiceModal = ({ onClose, onSave, categories, uid }: { onClose: () => void,
     setIsIdentifying(true);
     setError(null);
     try {
-      // 1. Transcribe audio via backend
+      // 1. Upload audio to /api/transcribe
       const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.webm');
-      
-      const transcribeRes = await fetch('/api/transcribe', {
-        method: 'POST',
+      formData.append("audio", audioBlob, "recording.wav");
+
+      const transcribeResponse = await fetch("/api/transcribe", {
+        method: "POST",
         body: formData,
       });
-      
-      if (!transcribeRes.ok) {
-        const errorData = await transcribeRes.json().catch(() => ({}));
-        throw new Error(errorData.error || '语音转文字失败');
-      }
-      const { text } = await transcribeRes.json();
-      setTranscript(text);
-      
-      if (!text || text.trim() === '') {
-        setError("未能识别到语音内容，请重试。");
-        setIsIdentifying(false);
-        return;
+
+      if (!transcribeResponse.ok) {
+        throw new Error("语音转写失败，请检查网络或 API 配置。");
       }
 
-      // 2. Parse bill text via backend
-      const parseRes = await fetch('/api/parse-bill', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, categories }),
-      });
-      
-      if (!parseRes.ok) {
-        const errorData = await parseRes.json().catch(() => ({}));
-        throw new Error(errorData.error || '解析账单失败');
+      const { text: transcriptText } = await transcribeResponse.json();
+      if (!transcriptText) {
+        throw new Error("未能识别到语音内容，请重试。");
       }
-      const billData = await parseRes.json();
+
+      setTranscript(transcriptText);
+
+      // 2. Send transcript to /api/parse-bill
+      const parseResponse = await fetch("/api/parse-bill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: transcriptText }),
+      });
+
+      if (!parseResponse.ok) {
+        throw new Error("账单解析失败，请尝试手动输入。");
+      }
+
+      const billData = await parseResponse.json();
       setDetectedData(billData);
     } catch (err: any) {
       console.error("AI Identification failed:", err);
@@ -2081,12 +2079,7 @@ const VoiceModal = ({ onClose, onSave, categories, uid }: { onClose: () => void,
     };
 
     try {
-      await addDoc(collection(db, 'bills'), {
-        ...billToSave,
-        uid,
-        date: Timestamp.fromDate(billToSave.date),
-        createdAt: serverTimestamp()
-      });
+      await onSave(billToSave);
       onClose();
     } catch (err: any) {
       console.error("Save failed:", err);
@@ -2255,28 +2248,28 @@ const ScreenshotModal = ({ onClose, onSave, categories }: { onClose: () => void,
     setIsScanning(true);
     setError(null);
     try {
-      const response = await fetch('/api/recognize-receipt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: base64Data, categories }),
+      const response = await fetch("/api/recognize-receipt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: base64Data }),
       });
-      
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || '识别小票失败');
+        throw new Error("截图识别失败，请尝试手动输入。");
       }
-      const data = await response.json();
+
+      const receiptData = await response.json();
       
-      setTitle(data.title || '未命名商户');
-      setAmount(data.amount?.toString() || '');
-      setType(data.type || 'expense');
+      setTitle(receiptData.merchant || receiptData.note || '未命名商户');
+      setAmount(receiptData.amount?.toString() || '');
+      setType(receiptData.type || 'expense');
       
       // Fallback to 'other' if category is not recognized or not in our list
-      const recognizedCat = categories.find(c => c.id === data.category);
+      const recognizedCat = categories.find(c => c.id === receiptData.category);
       setSelectedCategory(recognizedCat ? recognizedCat.id : 'other');
       
-      if (data.date) {
-        const parsedDate = new Date(data.date);
+      if (receiptData.time) {
+        const parsedDate = new Date(receiptData.time);
         if (!isNaN(parsedDate.getTime())) {
           setDate(parsedDate);
         }
@@ -2610,6 +2603,7 @@ function AppContent() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [successOverlay, setSuccessOverlay] = useState<{ open: boolean; type: 'saving' | 'expense' }>({ open: false, type: 'expense' });
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -2846,6 +2840,8 @@ function AppContent() {
         date: Timestamp.fromDate(transaction.date),
         createdAt: serverTimestamp()
       });
+      // Trigger success animation
+      setSuccessOverlay({ open: true, type: transaction.type === 'income' ? 'saving' : 'expense' });
     } catch (error) {
       console.error("Add failed:", error);
     }
@@ -2904,10 +2900,10 @@ function AppContent() {
         <div className="relative w-full max-w-[440px] h-full sm:h-[952px] bg-background overflow-hidden sm:rounded-[3.5rem] sm:shadow-[0_0_0_12px_#1a1a1a,0_20px_50px_rgba(0,0,0,0.3)] flex flex-col items-center justify-center p-8 text-center space-y-6">
           <div id="recaptcha-container"></div>
           
-          <div className="w-20 h-20 bg-primary/10 rounded-[2rem] flex items-center justify-center text-primary mb-2">
-            <Wallet size={40} />
+          <div className="flex flex-col items-center space-y-4 mb-4">
+            <JijiLogo size="h-24 w-24" />
+            <h1 className="text-3xl font-cute text-primary font-bold">叽叽记账</h1>
           </div>
-          <JijiLogo size="text-3xl" />
           
           <div className="w-full space-y-4">
             {loginError && (
@@ -3282,6 +3278,12 @@ function AppContent() {
 
         {/* Home Indicator Simulation */}
         <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-32 h-1.5 bg-on-surface/10 rounded-full z-[70] hidden sm:block" />
+
+        <HamsterSuccessOverlay 
+          open={successOverlay.open} 
+          type={successOverlay.type} 
+          onFinish={() => setSuccessOverlay(prev => ({ ...prev, open: false }))} 
+        />
       </div>
     </div>
   );
