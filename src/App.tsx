@@ -13,6 +13,7 @@ import {
   Mic, 
   Image as ImageIcon, 
   LayoutGrid, 
+  Receipt,
   ReceiptText, 
   BarChart3, 
   User,
@@ -49,7 +50,8 @@ import {
   Smartphone,
   ArrowLeft,
   Eye,
-  EyeOff
+  EyeOff,
+  AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 // import { GoogleGenAI, Type } from "@google/genai"; // Removed Gemini
@@ -769,11 +771,16 @@ const AnalysisScreen = ({
     const data: { name: string, value: number }[] = [];
 
     if (period === 'week') {
-      const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(now.getDate() - i);
-        const dayName = days[d.getDay()];
+      const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+      // Get the Monday of the current week
+      const currentDay = now.getDay(); // 0 is Sunday, 1 is Monday...
+      const diff = now.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
+      const monday = new Date(now.setDate(diff));
+      
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        const dayName = days[i];
         const dayTotal = transactions
           .filter(t => {
             const tDate = new Date(t.date);
@@ -787,21 +794,26 @@ const AnalysisScreen = ({
         data.push({ name: dayName, value: dayTotal });
       }
     } else if (period === 'month') {
-      // Group by 7-day intervals for the current month
-      for (let i = 1; i <= 4; i++) {
-        const label = `${i * 7}日`;
-        const weekTotal = transactions
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      
+      for (let i = 1; i <= daysInMonth; i++) {
+        const label = `${i}日`;
+        const dayTotal = transactions
           .filter(t => {
             const tDate = new Date(t.date);
-            const isSameMonth = tDate.getMonth() === now.getMonth() && tDate.getFullYear() === now.getFullYear();
-            const day = tDate.getDate();
             return t.status === 'confirmed' && 
                    t.type === type && 
-                   isSameMonth && 
-                   day > (i - 1) * 7 && day <= i * 7;
+                   tDate.getFullYear() === year &&
+                   tDate.getMonth() === month &&
+                   tDate.getDate() === i;
           })
           .reduce((sum, t) => sum + t.amount, 0);
-        data.push({ name: label, value: weekTotal });
+        
+        // Only push every few days to keep chart clean if it's too many points, 
+        // but user asked for 1 to 31. Recharts AreaChart handles many points well.
+        data.push({ name: label, value: dayTotal });
       }
     } else {
       const months = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
@@ -967,7 +979,8 @@ const BillsScreen = ({
   onView,
   initialSearch = '',
   initialCategory = '全部',
-  categories
+  categories,
+  budget = 15000
 }: { 
   transactions: Transaction[],
   onEdit: (t: Transaction) => void,
@@ -975,11 +988,71 @@ const BillsScreen = ({
   onView: (t: Transaction) => void,
   initialSearch?: string,
   initialCategory?: string,
-  categories: Category[]
+  categories: Category[],
+  budget?: number
 }) => {
   const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [activeSearch, setActiveSearch] = useState(initialSearch);
   const [selectedTag, setSelectedTag] = useState(initialCategory);
+  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month' | 'year'>('day');
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showFutureWarning, setShowFutureWarning] = useState(false);
+  const [showSearchOverlay, setShowSearchOverlay] = useState(false);
+
+  // Helper to get start and end of a week
+  const getWeekRange = (date: Date) => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
+    const start = new Date(d.setDate(diff));
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  };
+
+  // Helper to check if a date is in the future
+  const isFuture = (date: Date, mode: 'day' | 'week' | 'month' | 'year') => {
+    const now = new Date();
+    if (mode === 'year') {
+      return date.getFullYear() > now.getFullYear();
+    }
+    if (mode === 'month') {
+      return date.getFullYear() > now.getFullYear() || 
+             (date.getFullYear() === now.getFullYear() && date.getMonth() > now.getMonth());
+    }
+    if (mode === 'week') {
+      const { start } = getWeekRange(date);
+      const { start: nowStart } = getWeekRange(now);
+      return start > nowStart;
+    }
+    // day mode
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const n = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return d > n;
+  };
+
+  const handleNavigate = (offset: number) => {
+    const newDate = new Date(selectedDate);
+    if (viewMode === 'year') {
+      newDate.setFullYear(selectedDate.getFullYear() + offset);
+    } else if (viewMode === 'month') {
+      newDate.setMonth(selectedDate.getMonth() + offset);
+    } else if (viewMode === 'week') {
+      newDate.setDate(selectedDate.getDate() + (offset * 7));
+    } else {
+      newDate.setDate(selectedDate.getDate() + offset);
+    }
+
+    if (isFuture(newDate, viewMode)) {
+      setShowFutureWarning(true);
+      setTimeout(() => setShowFutureWarning(false), 2000);
+      return;
+    }
+
+    setSelectedDate(newDate);
+  };
 
   useEffect(() => {
     if (initialCategory) {
@@ -996,30 +1069,74 @@ const BillsScreen = ({
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
+      if (t.status !== 'confirmed') return false;
+      
+      const tDate = new Date(t.date);
+      const now = new Date();
+      
+      // Time Filter
+      let matchesTime = true;
+      if (viewMode === 'day') {
+        matchesTime = tDate.toDateString() === selectedDate.toDateString();
+      } else if (viewMode === 'week') {
+        const { start, end } = getWeekRange(selectedDate);
+        matchesTime = tDate >= start && tDate <= end;
+      } else if (viewMode === 'month') {
+        matchesTime = tDate.getMonth() === selectedDate.getMonth() && 
+                      tDate.getFullYear() === selectedDate.getFullYear();
+      } else if (viewMode === 'year') {
+        matchesTime = tDate.getFullYear() === selectedDate.getFullYear();
+      }
+
+      // Search Filter
       const matchesSearch = activeSearch === '' || 
         t.title.toLowerCase().includes(activeSearch.toLowerCase()) ||
         (t.note && t.note.toLowerCase().includes(activeSearch.toLowerCase()));
       
+      // Category Filter
       const matchesTag = selectedTag === '全部' || 
         categories.find(c => c.id === t.category)?.name === selectedTag;
 
-      return t.status === 'confirmed' && matchesSearch && matchesTag;
+      return matchesTime && matchesSearch && matchesTag;
     }).sort((a, b) => {
       const dateA = a.date instanceof Date && !isNaN(a.date.getTime()) ? a.date.getTime() : 0;
       const dateB = b.date instanceof Date && !isNaN(b.date.getTime()) ? b.date.getTime() : 0;
       return dateB - dateA;
     });
-  }, [transactions, activeSearch, selectedTag, categories]);
+  }, [transactions, activeSearch, selectedTag, categories, viewMode, selectedDate]);
 
-  const monthlyIncome = useMemo(() => 
-    transactions.filter(t => t.status === 'confirmed' && t.type === 'income').reduce((sum, t) => sum + t.amount, 0),
-    [transactions]
-  );
+  const stats = useMemo(() => {
+    const income = filteredTransactions
+      .filter(t => t.type === 'income')
+      .reduce((sum, t) => sum + t.amount, 0);
+    const expense = filteredTransactions
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + t.amount, 0);
+    return { income, expense };
+  }, [filteredTransactions]);
 
-  const monthlyExpense = useMemo(() => 
-    transactions.filter(t => t.status === 'confirmed' && t.type === 'expense').reduce((sum, t) => sum + t.amount, 0),
-    [transactions]
-  );
+  const groupedTransactions = useMemo(() => {
+    const groups: Record<string, Transaction[]> = {};
+    filteredTransactions.forEach(t => {
+      let dateStr = '';
+      const d = new Date(t.date);
+      
+      if (viewMode === 'year') {
+        dateStr = d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' });
+      } else {
+        dateStr = d.toLocaleDateString('zh-CN', { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric',
+          weekday: viewMode === 'day' ? undefined : 'long'
+        });
+      }
+      
+      if (!groups[dateStr]) groups[dateStr] = [];
+      groups[dateStr].push(t);
+    });
+    return groups;
+  }, [filteredTransactions, viewMode]);
 
   const handleSearch = () => {
     setActiveSearch(searchQuery);
@@ -1027,89 +1144,309 @@ const BillsScreen = ({
 
   const tags = ['全部', ...categories.map(c => c.name)];
 
+  const getTitle = () => {
+    const now = new Date();
+    if (viewMode === 'day') {
+      const isToday = selectedDate.toDateString() === now.toDateString();
+      return isToday ? '今日账单' : `${selectedDate.getMonth() + 1}月${selectedDate.getDate()}日账单`;
+    }
+    if (viewMode === 'week') {
+      const { start, end } = getWeekRange(selectedDate);
+      const { start: nowStart } = getWeekRange(now);
+      if (start.getTime() === nowStart.getTime()) return '本周账单';
+      return `${start.getMonth() + 1}月${start.getDate()}日 - ${end.getMonth() + 1}月${end.getDate()}日账单`;
+    }
+    if (viewMode === 'month') {
+      const isThisMonth = selectedDate.getMonth() === now.getMonth() && selectedDate.getFullYear() === now.getFullYear();
+      return isThisMonth ? '本月账单' : `${selectedDate.getMonth() + 1}月账单`;
+    }
+    if (viewMode === 'year') {
+      const isThisYear = selectedDate.getFullYear() === now.getFullYear();
+      return isThisYear ? '本年账单' : `${selectedDate.getFullYear()}年账单`;
+    }
+    return '账单明细';
+  };
+
+  const getSubtitle = () => {
+    if (viewMode === 'day') {
+      return selectedDate.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+    if (viewMode === 'week') {
+      const { start, end } = getWeekRange(selectedDate);
+      return `${start.getFullYear()}年${start.getMonth() + 1}月${start.getDate()}日 - ${end.getMonth() + 1}月${end.getDate()}日`;
+    }
+    if (viewMode === 'month') {
+      return `${selectedDate.getFullYear()}年${selectedDate.getMonth() + 1}月`;
+    }
+    return `${selectedDate.getFullYear()}年全年账单`;
+  };
+
+  const getStatsLabel = () => {
+    if (viewMode === 'day') return '今日';
+    if (viewMode === 'week') return '本周';
+    if (viewMode === 'month') return '本月';
+    return '本年';
+  };
+
+  const getTimeNavigatorLabel = () => {
+    if (viewMode === 'day') {
+      return `${selectedDate.getMonth() + 1}月${selectedDate.getDate()}日`;
+    }
+    if (viewMode === 'week') {
+      const { start, end } = getWeekRange(selectedDate);
+      return `${start.getMonth() + 1}.${start.getDate()} - ${end.getMonth() + 1}.${end.getDate()}`;
+    }
+    if (viewMode === 'month') {
+      return `${selectedDate.getMonth() + 1}月`;
+    }
+    return `${selectedDate.getFullYear()}年`;
+  };
+
   return (
-    <div className="pt-36 pb-48 px-6 max-w-2xl mx-auto space-y-8">
-      <section className="bg-surface-container-low rounded-3xl p-8 space-y-6">
-        <div className="text-center space-y-2">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60">本月总支出</p>
-          <h2 className="text-4xl font-headline font-extrabold tracking-tighter">¥{formatAmount(monthlyExpense)}</h2>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="text-center">
-            <p className="text-[10px] font-bold text-on-surface-variant/60">本月收入</p>
-            <p className="text-lg font-bold text-secondary">¥{formatAmount(monthlyIncome)}</p>
-          </div>
-          <div className="text-center">
-            <p className="text-[10px] font-bold text-on-surface-variant/60">预算剩余</p>
-            <p className="text-lg font-bold text-primary">¥{formatAmount(15000 - monthlyExpense)}</p>
-          </div>
-        </div>
-      </section>
-
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-primary/40">
-            <Search size={20} />
-          </div>
-          <input 
-            type="text" 
-            placeholder="搜索账单、商户或类别" 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            className="w-full h-14 pl-12 pr-6 bg-surface-container-low border-none rounded-full font-medium focus:ring-2 focus:ring-secondary/20"
-          />
-        </div>
-        <button 
-          onClick={handleSearch}
-          className="h-14 px-6 bg-secondary text-white rounded-full font-bold active:scale-95 transition-transform"
-        >
-          搜索
-        </button>
-      </div>
-
-      <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-2 px-2">
-        {tags.map((tag) => (
-          <button 
-            key={tag} 
-            onClick={() => setSelectedTag(tag)}
-            className={cn(
-              "px-6 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all",
-              selectedTag === tag ? "bg-primary text-white" : "bg-surface-container-low text-on-surface-variant"
-            )}
+    <div className="pt-24 pb-48 px-6 max-w-2xl mx-auto space-y-8 relative">
+      {/* Future Date Warning Toast */}
+      <AnimatePresence>
+        {showFutureWarning && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -20, x: '-50%' }}
+            className="fixed top-24 left-1/2 z-[100] bg-error/90 backdrop-blur-md text-white px-6 py-3 rounded-full shadow-2xl font-bold flex items-center gap-2 border border-white/20"
           >
-            {tag}
+            <AlertCircle size={18} />
+            未来时间暂不可查看
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 1. Page Header & Time Navigator */}
+      <div className="space-y-6 px-2">
+        <div className="flex justify-between items-start">
+          <div className="space-y-1">
+            <h2 className="text-3xl font-headline font-extrabold text-on-surface tracking-tight transition-all duration-500">
+              {getTitle()}
+            </h2>
+            <p className="text-xs text-on-surface-variant/60 font-medium tracking-wide">
+              {getSubtitle()}
+            </p>
+          </div>
+          <button 
+            onClick={() => setShowSearchOverlay(true)}
+            className="p-3 bg-surface-container-low rounded-2xl border border-outline-variant/10 shadow-sm text-primary hover:bg-surface-container-highest transition-all active:scale-90"
+          >
+            <Search size={24} />
           </button>
-        ))}
+        </div>
+
+        <div className="flex items-center justify-between bg-surface-container-low p-1 rounded-2xl border border-outline-variant/10 shadow-sm">
+          <button 
+            onClick={() => handleNavigate(-1)} 
+            className="p-3 hover:bg-surface-container-highest rounded-xl transition-all active:scale-90 text-primary"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <div className="flex flex-col items-center">
+            <span className="text-sm font-black text-on-surface tracking-tight">
+              {getTimeNavigatorLabel()}
+            </span>
+          </div>
+          <button 
+            onClick={() => handleNavigate(1)} 
+            className="p-3 hover:bg-surface-container-highest rounded-xl transition-all active:scale-90 text-primary"
+          >
+            <ChevronRight size={20} />
+          </button>
+        </div>
       </div>
 
-      <section className="space-y-6">
-        <div>
-          <div className="flex justify-between items-center mb-4">
-            <h4 className="font-bold text-on-surface">
-              {selectedTag === '全部' ? '最近账单' : `${selectedTag} 账单`}
-            </h4>
-            <span className="text-[10px] font-bold text-on-surface-variant/60">共 {filteredTransactions.length} 笔交易</span>
+      {/* 2. Stats Cards */}
+      <section className="bg-surface-container-low rounded-[2.5rem] p-8 space-y-6 shadow-sm border border-outline-variant/10 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl" />
+        <div className="text-center space-y-1 relative z-10">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-on-surface-variant/60">{getStatsLabel()}总支出</p>
+          <h2 className="text-5xl font-headline font-black tracking-tighter text-primary">¥{formatAmount(stats.expense)}</h2>
+        </div>
+        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-outline-variant/20 relative z-10">
+          <div className="text-center space-y-1 border-r border-outline-variant/20">
+            <p className="text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-widest">{getStatsLabel()}收入</p>
+            <p className="text-xl font-bold text-secondary">¥{formatAmount(stats.income)}</p>
           </div>
-          <div className="space-y-3">
-            {filteredTransactions.length > 0 ? (
-              filteredTransactions.map(t => (
-                <TransactionItem 
-                  key={t.id} 
-                  transaction={t} 
-                  onEdit={onEdit}
-                  onDelete={onDelete}
-                  onClick={onView}
-                />
-              ))
-            ) : (
-              <div className="text-center py-12 text-on-surface-variant/40 italic">
-                没有找到相关账单
-              </div>
-            )}
+          <div className="text-center space-y-1">
+            <p className="text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-widest">预算剩余</p>
+            <p className="text-xl font-bold text-on-surface">¥{formatAmount(budget - stats.expense)}</p>
           </div>
         </div>
       </section>
+
+      {/* 3. Filters */}
+      <div className="space-y-6">
+        {/* Time Filters (iOS Segmented Control Style) */}
+        <div className="flex justify-center">
+          <div className="inline-flex bg-surface-container-low p-1 rounded-2xl border border-outline-variant/10 shadow-inner w-full sm:w-auto">
+            {(['day', 'week', 'month', 'year'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => {
+                  setViewMode(mode);
+                  setSelectedDate(new Date());
+                }}
+                className={cn(
+                  "flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 relative",
+                  viewMode === mode 
+                    ? "bg-white text-primary shadow-sm scale-[1.02] z-10" 
+                    : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container-highest/50"
+                )}
+              >
+                {mode === 'day' ? '按天' : mode === 'week' ? '按周' : mode === 'month' ? '按月' : '按年'}
+                {viewMode === mode && (
+                  <motion.div 
+                    layoutId="activeTab"
+                    className="absolute inset-0 bg-white rounded-xl -z-10 shadow-sm"
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Category Filters */}
+        <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-2 px-2">
+          {tags.map((tag) => (
+            <button 
+              key={tag} 
+              onClick={() => setSelectedTag(tag)}
+              className={cn(
+                "px-6 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all border",
+                selectedTag === tag 
+                  ? "bg-secondary text-white border-secondary shadow-md scale-105" 
+                  : "bg-surface-container-low text-on-surface-variant border-outline-variant/20 hover:border-secondary/50"
+              )}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 4. Transaction List */}
+      <section className="space-y-8">
+        {Object.keys(groupedTransactions).length > 0 ? (
+          Object.entries(groupedTransactions).map(([date, items]) => (
+            <div key={date} className="space-y-3">
+              <div className="flex items-center gap-3 px-2">
+                <div className="h-px flex-1 bg-outline-variant/30" />
+                <span className="text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-[0.2em]">{date}</span>
+                <div className="h-px flex-1 bg-outline-variant/30" />
+              </div>
+              <div className="space-y-3">
+                {items.map(t => (
+                  <TransactionItem 
+                    key={t.id} 
+                    transaction={t} 
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                    onClick={onView}
+                  />
+                ))}
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="py-20 text-center space-y-4">
+            <div className="w-20 h-20 bg-surface-container-highest rounded-full flex items-center justify-center mx-auto text-on-surface-variant/20">
+              <Receipt size={40} />
+            </div>
+            <div className="space-y-1">
+              <p className="text-on-surface font-bold">
+                {isFuture(selectedDate, viewMode) ? '未来时间暂不可查看' : '这一阶段还没有账单记录'}
+              </p>
+              <p className="text-xs text-on-surface-variant/60">
+                {isFuture(selectedDate, viewMode) ? '还没到这个时间哦' : '去记一笔账单吧，让生活更有条理'}
+              </p>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Search Overlay */}
+      <AnimatePresence>
+        {showSearchOverlay && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="fixed inset-0 z-[200] bg-background flex flex-col"
+          >
+            <div className="pt-12 pb-6 px-6 flex items-center gap-4 border-b border-outline-variant/10">
+              <button 
+                onClick={() => {
+                  setShowSearchOverlay(false);
+                  setSearchQuery('');
+                  setActiveSearch('');
+                }}
+                className="p-2 hover:bg-surface-container-highest rounded-full transition-colors"
+              >
+                <ChevronLeft size={24} />
+              </button>
+              <div className="relative flex-1">
+                <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-primary/40" />
+                <input 
+                  autoFocus
+                  type="text" 
+                  placeholder="搜索账单、商户或类别" 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  className="w-full h-12 pl-12 pr-4 bg-surface-container-low border-none rounded-full font-medium focus:ring-2 focus:ring-primary/10"
+                />
+              </div>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6 space-y-8 no-scrollbar">
+              {activeSearch ? (
+                Object.keys(groupedTransactions).length > 0 ? (
+                  Object.entries(groupedTransactions).map(([date, items]) => (
+                    <div key={date} className="space-y-3">
+                      <div className="flex items-center gap-3 px-2">
+                        <div className="h-px flex-1 bg-outline-variant/30" />
+                        <span className="text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-[0.2em]">{date}</span>
+                        <div className="h-px flex-1 bg-outline-variant/30" />
+                      </div>
+                      <div className="space-y-3">
+                        {items.map(t => (
+                          <TransactionItem 
+                            key={t.id} 
+                            transaction={t} 
+                            onEdit={onEdit}
+                            onDelete={onDelete}
+                            onClick={(trans) => {
+                              onView(trans);
+                              setShowSearchOverlay(false);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-20 text-center space-y-4">
+                    <div className="w-20 h-20 bg-surface-container-highest rounded-full flex items-center justify-center mx-auto text-on-surface-variant/20">
+                      <Search size={40} />
+                    </div>
+                    <p className="text-on-surface font-bold">未找到相关账单</p>
+                  </div>
+                )
+              ) : (
+                <div className="py-20 text-center space-y-4 opacity-40">
+                  <Search size={60} className="mx-auto" />
+                  <p className="text-sm font-medium">输入关键词搜索账单</p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -3159,6 +3496,7 @@ function AppContent() {
                   initialSearch={billsFilter.search}
                   initialCategory={billsFilter.category}
                   categories={categories}
+                  budget={budget}
                 />
               </motion.div>
             )}
