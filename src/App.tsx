@@ -22,6 +22,8 @@ import {
   CreditCard,
   Search,
   TrendingDown,
+  TrendingUp,
+  PieChart,
   Utensils,
   HeartPulse,
   Gamepad2,
@@ -227,28 +229,37 @@ const BottomNav = ({ activeTab, onTabChange }: { activeTab: string, onTabChange:
 // JijiLogo component is now imported from ./components/JijiLogo.tsx
 
 const Header = ({ title, showMenu = true, onMenuClick, userAvatar, onAvatarClick }: { title: string, showMenu?: boolean, onMenuClick?: () => void, userAvatar: string, onAvatarClick: () => void }) => (
-  <header className="absolute top-10 w-full flex items-center px-6 h-16 glass-effect z-50">
-    <div className="flex items-center gap-3 z-10">
-      {showMenu ? (
-        <button onClick={onMenuClick} className="p-2 -ml-2 hover:bg-surface-container-highest rounded-full transition-colors active:scale-90">
-          <Menu className="text-primary" size={24} />
+  <header className="absolute top-0 w-full flex items-center justify-between px-6 h-28 z-50 bg-white/80 backdrop-blur-xl border-b border-outline-variant/5 pt-10">
+    <div className="flex items-center w-12">
+      {showMenu && (
+        <button 
+          onClick={onMenuClick} 
+          className="w-10 h-10 flex items-center justify-center rounded-full bg-white/40 backdrop-blur-md border border-white/10 active:scale-90 transition-all shadow-sm"
+        >
+          <Menu className="text-on-surface-variant" size={20} />
         </button>
-      ) : <div className="w-6" />}
+      )}
     </div>
-    <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center gap-2">
-      {title === '叽叽记账' && <JijiLogo size="h-8" />}
-      <h1 className={cn(
-        "text-xl font-bold tracking-tight transition-all duration-300",
-        title === '叽叽记账' ? "font-cute text-primary text-2xl drop-shadow-sm" : "text-on-surface font-headline"
-      )}>
-        {title}
-      </h1>
+    
+    <div className="flex items-center justify-center gap-2 flex-1">
+      {title === '叽叽记账' ? (
+        <>
+          <JijiLogo size="h-6" />
+          <h1 className="font-cute text-primary text-xl font-bold tracking-tight">
+            叽叽记账
+          </h1>
+        </>
+      ) : (
+        <h1 className="text-lg font-headline font-bold text-on-surface tracking-tight">
+          {title}
+        </h1>
+      )}
     </div>
-    <div className="flex-1" />
-    <div className="flex items-center gap-3 z-10">
+    
+    <div className="flex items-center justify-end w-12">
       <button 
         onClick={onAvatarClick}
-        className="w-8 h-8 rounded-full overflow-hidden bg-surface-container-highest active:scale-90 transition-transform"
+        className="w-10 h-10 rounded-full overflow-hidden border-2 border-white shadow-md active:scale-90 transition-all"
       >
         <img 
           src={userAvatar} 
@@ -647,6 +658,7 @@ const OverviewScreen = ({
   onEdit,
   onDelete,
   onView,
+  onNavigateToBills,
   categories
 }: { 
   transactions: Transaction[], 
@@ -654,6 +666,7 @@ const OverviewScreen = ({
   onEdit: (t: Transaction) => void,
   onDelete: (id: string) => void,
   onView: (t: Transaction) => void,
+  onNavigateToBills: () => void,
   categories: Category[]
 }) => {
   const sortedTransactions = useMemo(() => {
@@ -664,60 +677,140 @@ const OverviewScreen = ({
     });
   }, [transactions]);
 
-  const recent = sortedTransactions.filter(t => t.status === 'confirmed').slice(0, 3);
+  const recent = sortedTransactions.filter(t => t.status === 'confirmed').slice(0, 4);
 
-  const monthlyIncome = useMemo(() => {
+  const monthlyStats = useMemo(() => {
     const now = new Date();
-    return sortedTransactions.filter(t => {
+    const currentMonthTransactions = sortedTransactions.filter(t => {
       const d = new Date(t.date);
-      return t.type === 'income' && 
-             t.status === 'confirmed' && 
+      return t.status === 'confirmed' && 
              d.getMonth() === now.getMonth() && 
              d.getFullYear() === now.getFullYear();
-    }).reduce((sum, t) => sum + t.amount, 0);
-  }, [sortedTransactions]);
+    });
 
-  const monthlyExpense = useMemo(() => {
-    const now = new Date();
-    return sortedTransactions.filter(t => {
-      const d = new Date(t.date);
-      return t.type === 'expense' && 
-             t.status === 'confirmed' && 
-             d.getMonth() === now.getMonth() && 
-             d.getFullYear() === now.getFullYear();
-    }).reduce((sum, t) => sum + t.amount, 0);
-  }, [sortedTransactions]);
+    const income = currentMonthTransactions
+      .filter(t => t.type === 'income')
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const expense = currentMonthTransactions
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    // Find top category
+    const catTotals: Record<string, number> = {};
+    currentMonthTransactions
+      .filter(t => t.type === 'expense')
+      .forEach(t => {
+        catTotals[t.category] = (catTotals[t.category] || 0) + t.amount;
+      });
+    
+    const topCatId = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0]?.[0];
+    const topCatName = categories.find(c => c.id === topCatId)?.name;
+
+    return {
+      income,
+      expense,
+      balance: income - expense,
+      count: currentMonthTransactions.length,
+      topCategory: topCatName
+    };
+  }, [sortedTransactions, categories]);
+
+  const statusMessage = useMemo(() => {
+    if (monthlyStats.balance < 0) {
+      return `本月已超支 ¥${formatAmount(Math.abs(monthlyStats.balance))}`;
+    }
+    if (monthlyStats.count > 0) {
+      return `本月已记录 ${monthlyStats.count} 笔账单${monthlyStats.topCategory ? `，消费主要集中在${monthlyStats.topCategory}` : ''}`;
+    }
+    return "本月还没有账单记录，开始记第一笔吧";
+  }, [monthlyStats]);
 
   return (
-    <div className="pt-28 pb-48 px-6 max-w-2xl mx-auto space-y-8">
-      <section className="text-center py-4 space-y-2">
-        <p className="text-on-surface-variant font-label text-[10px] font-bold tracking-[0.15em] uppercase">本月结余</p>
-        <h2 className="text-6xl font-headline font-extrabold text-primary tracking-tighter">¥{formatAmount(monthlyIncome - monthlyExpense)}</h2>
-        <div className="flex justify-center gap-8 mt-6">
-          <div className="flex flex-col items-center">
-            <span className="text-xs text-on-surface-variant mb-1">本月收入</span>
-            <span className="text-secondary font-bold text-lg">¥{formatAmount(monthlyIncome)}</span>
+    <div className="pt-28 pb-96 px-6 max-w-2xl mx-auto space-y-8 relative">
+      {/* Monthly Overview Card */}
+      <section className="relative overflow-hidden rounded-[2.5rem] bg-white p-8 border border-outline-variant/10 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+        <div className="relative z-10 space-y-6">
+          <div className="space-y-1">
+            <p className="text-on-surface-variant font-bold text-xs uppercase tracking-widest opacity-60">本月结余</p>
+            <div className="flex items-baseline gap-1">
+              <span className={cn(
+                "text-5xl font-headline font-black tracking-tighter",
+                monthlyStats.balance < 0 ? "text-tertiary" : "text-primary"
+              )}>
+                ¥{formatAmount(monthlyStats.balance)}
+              </span>
+            </div>
           </div>
-          <div className="w-px h-8 bg-outline-variant/30 self-center" />
-          <div className="flex flex-col items-center">
-            <span className="text-xs text-on-surface-variant mb-1">本月支出</span>
-            <span className="text-tertiary font-bold text-lg">¥{formatAmount(monthlyExpense)}</span>
+          
+          <div className="grid grid-cols-2 gap-8 pt-6 border-t border-outline-variant/5">
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-secondary">
+                <div className="w-1.5 h-1.5 rounded-full bg-current" />
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-60">本月收入</span>
+              </div>
+              <p className="text-xl font-headline font-bold text-on-surface">¥{formatAmount(monthlyStats.income)}</p>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-tertiary">
+                <div className="w-1.5 h-1.5 rounded-full bg-current" />
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-60">本月支出</span>
+              </div>
+              <p className="text-xl font-headline font-bold text-on-surface">¥{formatAmount(monthlyStats.expense)}</p>
+            </div>
+          </div>
+
+          {/* Lightweight Insight / Status */}
+          <div className="flex items-center gap-2 pt-2">
+            <div className={cn(
+              "w-1.5 h-1.5 rounded-full animate-pulse",
+              monthlyStats.balance < 0 ? "bg-tertiary" : "bg-primary"
+            )} />
+            <p className="text-xs text-on-surface-variant font-medium">
+              {statusMessage}
+            </p>
           </div>
         </div>
+        
+        {/* Decorative background element */}
+        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl" />
       </section>
 
-      <section className="space-y-4">
-        <h3 className="text-xl font-headline font-bold text-on-surface">近期账单</h3>
+      {/* Recent Transactions Section */}
+      <section className="space-y-5">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="text-sm font-bold text-on-surface-variant uppercase tracking-widest">近期账单</h3>
+          <button 
+            onClick={onNavigateToBills}
+            className="text-xs font-bold text-primary flex items-center gap-1 hover:opacity-70 transition-opacity"
+          >
+            查看全部
+            <ChevronRight size={14} />
+          </button>
+        </div>
+        
         <div className="space-y-3">
-          {recent.map(t => (
-            <TransactionItem 
-              key={t.id} 
-              transaction={t} 
-              onEdit={onEdit}
-              onDelete={onDelete}
-              onClick={onView}
-            />
-          ))}
+          {recent.length > 0 ? (
+            recent.map(t => (
+              <TransactionItem 
+                key={t.id} 
+                transaction={t} 
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onClick={onView}
+              />
+            ))
+          ) : (
+            <div className="py-12 flex flex-col items-center justify-center text-center space-y-3 bg-surface-container-low/30 rounded-[2rem] border border-dashed border-outline-variant/20">
+              <div className="w-16 h-16 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant/30">
+                <ReceiptText size={32} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-on-surface-variant">暂无近期账单</p>
+                <p className="text-xs text-on-surface-variant/60">每一笔支出都值得被记录</p>
+              </div>
+            </div>
+          )}
         </div>
       </section>
     </div>
@@ -736,235 +829,278 @@ const AnalysisScreen = ({
   const [period, setPeriod] = useState<'week' | 'month' | 'year'>('week');
   const [type, setType] = useState<'expense' | 'income'>('expense');
 
-  const filteredTransactions = useMemo(() => {
+  // Helper to get date range for current and previous period
+  const dateRanges = useMemo(() => {
     const now = new Date();
+    const startOfCurrent = new Date(now);
+    const endOfCurrent = new Date(now);
+    const startOfPrev = new Date(now);
+    const endOfPrev = new Date(now);
+
+    if (period === 'week') {
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      startOfCurrent.setDate(diff);
+      startOfCurrent.setHours(0, 0, 0, 0);
+      endOfCurrent.setDate(startOfCurrent.getDate() + 6);
+      endOfCurrent.setHours(23, 59, 59, 999);
+      startOfPrev.setDate(startOfCurrent.getDate() - 7);
+      startOfPrev.setHours(0, 0, 0, 0);
+      endOfPrev.setDate(startOfPrev.getDate() + 6);
+      endOfPrev.setHours(23, 59, 59, 999);
+    } else if (period === 'month') {
+      startOfCurrent.setDate(1);
+      startOfCurrent.setHours(0, 0, 0, 0);
+      endOfCurrent.setMonth(startOfCurrent.getMonth() + 1, 0);
+      endOfCurrent.setHours(23, 59, 59, 999);
+      startOfPrev.setMonth(startOfCurrent.getMonth() - 1, 1);
+      startOfPrev.setHours(0, 0, 0, 0);
+      endOfPrev.setMonth(startOfPrev.getMonth() + 1, 0);
+      endOfPrev.setHours(23, 59, 59, 999);
+    } else {
+      startOfCurrent.setMonth(0, 1);
+      startOfCurrent.setHours(0, 0, 0, 0);
+      endOfCurrent.setMonth(11, 31);
+      endOfCurrent.setHours(23, 59, 59, 999);
+      startOfPrev.setFullYear(startOfCurrent.getFullYear() - 1, 0, 1);
+      startOfPrev.setHours(0, 0, 0, 0);
+      endOfPrev.setFullYear(startOfPrev.getFullYear(), 11, 31);
+      endOfPrev.setHours(23, 59, 59, 999);
+    }
+    return { startOfCurrent, endOfCurrent, startOfPrev, endOfPrev };
+  }, [period]);
+
+  const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
       if (t.status !== 'confirmed' || t.type !== type) return false;
       const date = new Date(t.date);
-      if (period === 'week') {
-        const weekAgo = new Date();
-        weekAgo.setDate(now.getDate() - 7);
-        return date >= weekAgo;
-      } else if (period === 'month') {
-        return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-      } else {
-        return date.getFullYear() === now.getFullYear();
-      }
+      return date >= dateRanges.startOfCurrent && date <= dateRanges.endOfCurrent;
     });
-  }, [transactions, period, type]);
+  }, [transactions, type, dateRanges]);
+
+  const prevTransactions = useMemo(() => {
+    return transactions.filter(t => {
+      if (t.status !== 'confirmed' || t.type !== type) return false;
+      const date = new Date(t.date);
+      return date >= dateRanges.startOfPrev && date <= dateRanges.endOfPrev;
+    });
+  }, [transactions, type, dateRanges]);
+
+  const totalAmount = useMemo(() => filteredTransactions.reduce((sum, t) => sum + t.amount, 0), [filteredTransactions]);
+  const prevTotalAmount = useMemo(() => prevTransactions.reduce((sum, t) => sum + t.amount, 0), [prevTransactions]);
+  const percentChange = useMemo(() => prevTotalAmount === 0 ? (totalAmount > 0 ? 100 : 0) : ((totalAmount - prevTotalAmount) / prevTotalAmount) * 100, [totalAmount, prevTotalAmount]);
 
   const categoryTotals = useMemo(() => {
     const totals: Record<string, number> = {};
-    filteredTransactions.forEach(t => {
-      totals[t.category] = (totals[t.category] || 0) + t.amount;
-    });
+    filteredTransactions.forEach(t => { totals[t.category] = (totals[t.category] || 0) + t.amount; });
     return totals;
   }, [filteredTransactions]);
 
-  const totalAmount = useMemo(() => 
-    filteredTransactions.reduce((sum, t) => sum + t.amount, 0),
-    [filteredTransactions]
-  );
+  const sortedCategories = useMemo(() => categories.filter(c => categoryTotals[c.id]).sort((a, b) => categoryTotals[b.id] - categoryTotals[a.id]), [categories, categoryTotals]);
+
+  const insights = useMemo(() => {
+    const list: string[] = [];
+    if (filteredTransactions.length === 0) return ["记录更多账单后，可查看更完整分析"];
+    if (sortedCategories.length > 0) list.push(`${period === 'week' ? '本周' : period === 'month' ? '本月' : '本年'}${type === 'expense' ? '支出' : '收入'}主要集中在${sortedCategories[0].name}`);
+    if (Math.abs(percentChange) > 5) list.push(`相比上${period === 'week' ? '周' : period === 'month' ? '月' : '年'}，${type === 'expense' ? '支出' : '收入'}${percentChange > 0 ? '增长' : '下降'} ${Math.abs(percentChange).toFixed(1)}%`);
+    if (period !== 'year' && filteredTransactions.length > 0) {
+      const dayTotals: Record<string, number> = {};
+      filteredTransactions.forEach(t => { const d = new Date(t.date).toLocaleDateString(); dayTotals[d] = (dayTotals[d] || 0) + t.amount; });
+      const peakDate = Object.entries(dayTotals).sort((a, b) => b[1] - a[1])[0][0];
+      const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+      list.push(`${period === 'week' ? '本周' : '本月'}消费最高的一天是${dayNames[new Date(peakDate).getDay()]}`);
+    }
+    return list;
+  }, [filteredTransactions, sortedCategories, period, type, percentChange]);
 
   const chartData = useMemo(() => {
-    const now = new Date();
     const data: { name: string, value: number }[] = [];
-
     if (period === 'week') {
       const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-      // Get the Monday of the current week
-      const currentDay = now.getDay(); // 0 is Sunday, 1 is Monday...
-      const diff = now.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
-      const monday = new Date(now.setDate(diff));
-      
       for (let i = 0; i < 7; i++) {
-        const d = new Date(monday);
-        d.setDate(monday.getDate() + i);
-        const dayName = days[i];
-        const dayTotal = transactions
-          .filter(t => {
-            const tDate = new Date(t.date);
-            return t.status === 'confirmed' && 
-                   t.type === type && 
-                   tDate.getDate() === d.getDate() && 
-                   tDate.getMonth() === d.getMonth() && 
-                   tDate.getFullYear() === d.getFullYear();
-          })
-          .reduce((sum, t) => sum + t.amount, 0);
-        data.push({ name: dayName, value: dayTotal });
+        const d = new Date(dateRanges.startOfCurrent); d.setDate(d.getDate() + i);
+        const val = filteredTransactions.filter(t => new Date(t.date).getDate() === d.getDate()).reduce((sum, t) => sum + t.amount, 0);
+        data.push({ name: days[i], value: val });
       }
     } else if (period === 'month') {
-      const year = now.getFullYear();
-      const month = now.getMonth();
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      
+      const daysInMonth = dateRanges.endOfCurrent.getDate();
       for (let i = 1; i <= daysInMonth; i++) {
-        const label = `${i}日`;
-        const dayTotal = transactions
-          .filter(t => {
-            const tDate = new Date(t.date);
-            return t.status === 'confirmed' && 
-                   t.type === type && 
-                   tDate.getFullYear() === year &&
-                   tDate.getMonth() === month &&
-                   tDate.getDate() === i;
-          })
-          .reduce((sum, t) => sum + t.amount, 0);
-        
-        // Only push every few days to keep chart clean if it's too many points, 
-        // but user asked for 1 to 31. Recharts AreaChart handles many points well.
-        data.push({ name: label, value: dayTotal });
+        const val = filteredTransactions.filter(t => new Date(t.date).getDate() === i).reduce((sum, t) => sum + t.amount, 0);
+        data.push({ name: `${i}日`, value: val });
       }
     } else {
       const months = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
-      // Show all months of current year
       for (let i = 0; i < 12; i++) {
-        const monthTotal = transactions
-          .filter(t => {
-            const tDate = new Date(t.date);
-            return t.status === 'confirmed' && 
-                   t.type === type && 
-                   tDate.getMonth() === i && 
-                   tDate.getFullYear() === now.getFullYear();
-          })
-          .reduce((sum, t) => sum + t.amount, 0);
-        data.push({ name: months[i], value: monthTotal });
+        const val = filteredTransactions.filter(t => new Date(t.date).getMonth() === i).reduce((sum, t) => sum + t.amount, 0);
+        data.push({ name: months[i], value: val });
       }
     }
     return data;
-  }, [transactions, period, type]);
+  }, [filteredTransactions, period, dateRanges]);
 
-  const periodLabel = {
-    week: '本周',
-    month: '本月',
-    year: '本年'
-  };
-
-  const typeLabel = {
-    expense: '支出',
-    income: '收入'
-  };
+  const typeLabel = type === 'expense' ? '支出' : '收入';
+  const periodLabel = period === 'week' ? '本周' : period === 'month' ? '本月' : '本年';
 
   return (
-    <div className="pt-36 pb-32 px-6 w-full space-y-12">
-      <section className="text-center space-y-4">
-        <div className="flex justify-center">
-          <div className="flex bg-surface-container-low p-1 rounded-full">
-            {(['expense', 'income'] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setType(t)}
-                className={cn(
-                  "px-6 py-2 rounded-full text-sm font-bold transition-all",
-                  type === t ? "bg-primary text-white shadow-md" : "text-on-surface-variant"
-                )}
-              >
-                {typeLabel[t]}
-              </button>
-            ))}
-          </div>
+    <div className="pt-28 pb-96 px-6 w-full max-w-2xl mx-auto space-y-8">
+      <div className="flex items-center justify-between"><h1 className="text-2xl font-headline font-bold text-on-surface">分析报告</h1></div>
+      <div className="space-y-4">
+        <div className="flex bg-surface-container-low p-1 rounded-2xl border border-outline-variant/10">
+          {(['expense', 'income'] as const).map((t) => (
+            <button key={t} onClick={() => setType(t)} className={cn("flex-1 py-2.5 rounded-xl text-sm font-bold transition-all relative", type === t ? "text-on-primary" : "text-on-surface-variant hover:bg-surface-container-highest/50")}>
+              {type === t && <motion.div layoutId="type-bg" className="absolute inset-0 bg-primary rounded-xl shadow-sm" transition={{ type: "spring", bounce: 0.2, duration: 0.6 }} />}
+              <span className="relative z-10">{t === 'expense' ? '支出' : '收入'}</span>
+            </button>
+          ))}
         </div>
-        <div className="space-y-1">
-          <p className="font-label text-on-surface-variant tracking-[0.15em] uppercase text-[10px] font-bold">{periodLabel[period]}总{typeLabel[type]}</p>
-          <h2 className="font-headline text-5xl font-extrabold tracking-tighter text-[#2D2D2D]">
-            ¥{formatAmount(totalAmount)}
-          </h2>
-          <div className="inline-flex items-center gap-1 px-3 py-1 bg-secondary-container rounded-full mt-2">
-            <TrendingDown size={14} className="text-on-secondary-container" />
-            <span className="text-xs font-bold text-on-secondary-container">较上阶段减少 8.4%</span>
-          </div>
+        <div className="flex bg-surface-container-low p-1 rounded-2xl border border-outline-variant/10">
+          {(['week', 'month', 'year'] as const).map((p) => (
+            <button key={p} onClick={() => setPeriod(p)} className={cn("flex-1 py-2 rounded-xl text-xs font-bold transition-all relative", period === p ? "text-primary" : "text-on-surface-variant hover:bg-surface-container-highest/50")}>
+              {period === p && <motion.div layoutId="period-bg" className="absolute inset-0 bg-white rounded-xl shadow-sm border border-outline-variant/20" transition={{ type: "spring", bounce: 0.2, duration: 0.6 }} />}
+              <span className="relative z-10">{p === 'week' ? '按周' : p === 'month' ? '按月' : '按年'}</span>
+            </button>
+          ))}
         </div>
-      </section>
-
-      <section className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div className="flex bg-surface-container-low p-1 rounded-full">
-            {(['week', 'month', 'year'] as const).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPeriod(p)}
-                className={cn(
-                  "px-4 py-1.5 rounded-full text-xs font-bold transition-all",
-                  period === p ? "bg-primary text-white" : "text-on-surface-variant"
-                )}
-              >
-                {p === 'week' ? '本周' : p === 'month' ? '本月' : '本年'}
-              </button>
-            ))}
+      </div>
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }} 
+        animate={{ opacity: 1, y: 0 }} 
+        className="bg-white rounded-[2.5rem] p-8 space-y-6 border border-outline-variant/10 shadow-[0_8px_30px_rgb(0,0,0,0.04)]"
+      >
+        <div className="space-y-2">
+          <p className="text-xs font-bold text-on-surface-variant/60 uppercase tracking-widest">{periodLabel}{typeLabel}</p>
+          <div className="flex items-baseline gap-2">
+            <span className="text-4xl font-headline font-black tracking-tighter text-on-surface">¥{formatAmount(totalAmount)}</span>
           </div>
-          <h3 className="font-headline text-lg font-bold">{periodLabel[period]}{typeLabel[type]}趋势</h3>
+          <div className="flex items-center gap-2">
+            <div className={cn(
+              "flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold", 
+              percentChange > 0 ? "bg-error/10 text-error" : "bg-secondary/10 text-secondary"
+            )}>
+              {percentChange > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+              <span>较上{period === 'week' ? '周' : period === 'month' ? '月' : '年'}{percentChange > 0 ? '增长' : '减少'} {Math.abs(percentChange).toFixed(1)}%</span>
+            </div>
+          </div>
         </div>
         
-        <div className="w-full h-56 bg-surface-container-low rounded-xl p-6">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ left: -20, right: 20, top: 10, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#5F5E5E" stopOpacity={0.1}/>
-                  <stop offset="95%" stopColor="#5F5E5E" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <XAxis 
-                dataKey="name" 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fontSize: 10, fontWeight: 700, fill: '#434841' }} 
-              />
-              <YAxis 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fontSize: 10, fontWeight: 700, fill: '#434841' }}
-                tickFormatter={(value) => `${value}`}
-              />
-              <Area type="monotone" dataKey="value" stroke="#5F5E5E" strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
-              <Tooltip cursor={false} content={() => null} />
-            </AreaChart>
-          </ResponsiveContainer>
+        <div className="h-px bg-outline-variant/5" />
+        
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-primary">
+            <Sparkles size={16} />
+            <h3 className="text-sm font-bold">智能分析</h3>
+          </div>
+          <div className="space-y-3">
+            {insights.map((insight, idx) => (
+              <div key={idx} className="flex items-start gap-3 group">
+                <div className="w-1.5 h-1.5 rounded-full bg-primary/30 mt-1.5 group-first:bg-primary transition-colors" />
+                <p className="text-sm font-medium text-on-surface/80 leading-relaxed">{insight}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </motion.div>
+      <section className="space-y-4">
+        <div className="flex items-center justify-between px-2"><h3 className="text-sm font-bold text-on-surface-variant uppercase tracking-widest">{typeLabel}趋势</h3></div>
+        <div className="bg-white rounded-[2rem] p-6 border border-outline-variant/10 shadow-[0_8px_30px_rgb(0,0,0,0.02)] h-64">
+          {totalAmount > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ left: -20, right: 10, top: 10, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.15}/>
+                    <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  interval={period === 'month' ? 6 : 0} 
+                  tick={{ fontSize: 10, fontWeight: 600, fill: 'var(--color-on-surface-variant)', opacity: 0.5 }} 
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 10, fontWeight: 600, fill: 'var(--color-on-surface-variant)', opacity: 0.5 }} 
+                  tickFormatter={(value) => value >= 1000 ? `${(value/1000).toFixed(1)}k` : value} 
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="value" 
+                  stroke="var(--color-primary)" 
+                  strokeWidth={3} 
+                  fillOpacity={1} 
+                  fill="url(#colorValue)" 
+                  animationDuration={1500} 
+                />
+                <Tooltip 
+                  cursor={{ stroke: 'var(--color-outline-variant)', strokeWidth: 1, strokeDasharray: '4 4' }} 
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      return (
+                        <div className="bg-surface-container-highest shadow-xl border border-outline-variant/20 rounded-xl p-3">
+                          <p className="text-[10px] font-bold text-on-surface-variant mb-1">{payload[0].payload.name}</p>
+                          <p className="text-sm font-black text-on-surface">¥{formatAmount(payload[0].value as number)}</p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }} 
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center space-y-3 opacity-30">
+              <BarChart3 size={40} />
+              <p className="text-xs font-medium">暂无足够数据生成趋势</p>
+            </div>
+          )}
         </div>
       </section>
-
-
-
-      <section className="space-y-6">
-        <div className="flex justify-between items-center">
-          <h3 className="font-headline text-xl font-bold">{typeLabel[type]}类别</h3>
-        </div>
-        <div className="bg-surface-container-low rounded-lg p-2 space-y-1">
-          {categories.filter(c => categoryTotals[c.id]).length > 0 ? (
-            categories.filter(c => categoryTotals[c.id]).map((item, i) => {
+      <section className="space-y-4">
+        <div className="flex items-center justify-between px-2"><h3 className="text-sm font-bold text-on-surface-variant uppercase tracking-widest">{typeLabel}分类</h3></div>
+        <div className="space-y-3">
+          {sortedCategories.length > 0 ? (
+            sortedCategories.map((item) => {
               const amount = categoryTotals[item.id];
               const progress = totalAmount > 0 ? (amount / totalAmount) * 100 : 0;
-              
+              const count = filteredTransactions.filter(t => t.category === item.id).length;
               return (
-                <div 
+                <motion.div 
                   key={item.id} 
-                  onClick={() => onNavigateToBills(item.name)}
-                  className="flex items-center justify-between p-4 bg-background rounded-[1.5rem] transition-all active:scale-95 duration-200 cursor-pointer"
+                  whileTap={{ scale: 0.98 }} 
+                  onClick={() => onNavigateToBills(item.name)} 
+                  className="bg-white p-5 rounded-[1.5rem] border border-outline-variant/10 flex items-center gap-4 cursor-pointer group shadow-[0_4px_20px_rgb(0,0,0,0.02)]"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className={cn("w-12 h-12 rounded-full flex items-center justify-center bg-surface-container-highest")}>
-                      <CategoryIcon icon={item.icon as any} size={24} className="text-primary" />
+                  <div className="w-12 h-12 rounded-2xl bg-surface-container-low flex items-center justify-center group-hover:bg-primary/10 transition-colors">
+                    <CategoryIcon icon={item.icon as any} size={24} className="text-primary" />
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <p className="text-sm font-bold text-on-surface">{item.name}</p>
+                        <p className="text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-widest">{count} 笔交易</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-black text-on-surface">¥{formatAmount(amount)}</p>
+                        <p className="text-[10px] font-bold text-primary/60">{progress.toFixed(1)}%</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-body font-bold text-sm">{item.name}</p>
-                      <p className="text-[10px] font-medium text-on-surface-variant opacity-60 uppercase tracking-widest">
-                        {filteredTransactions.filter(t => t.category === item.id).length} 笔交易
-                      </p>
+                    <div className="h-1.5 bg-surface-container-low rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }} 
+                        animate={{ width: `${progress}%` }} 
+                        transition={{ duration: 1, ease: "easeOut" }} 
+                        className="h-full bg-primary rounded-full" 
+                      />
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-headline font-bold text-sm text-[#2D2D2D]">¥{formatAmount(amount)}</p>
-                    <div className="w-20 h-1 bg-surface-container-highest rounded-full mt-2 overflow-hidden">
-                      <div className="h-full bg-secondary" style={{ width: `${progress}%` }} />
-                    </div>
-                  </div>
-                </div>
+                </motion.div>
               );
             })
           ) : (
-            <div className="p-8 text-center text-on-surface-variant/40 italic text-sm">
-              此阶段暂无{typeLabel[type]}记录
-            </div>
+            <div className="bg-surface-container-low rounded-3xl p-12 text-center space-y-4 border border-dashed border-outline-variant/30"><div className="w-16 h-16 bg-surface-container-highest rounded-full flex items-center justify-center mx-auto text-on-surface-variant/20"><PieChart size={32} /></div><p className="text-sm font-medium text-on-surface-variant/60">此阶段暂无{typeLabel}记录</p></div>
           )}
         </div>
       </section>
@@ -1203,7 +1339,7 @@ const BillsScreen = ({
   };
 
   return (
-    <div className="pt-24 pb-48 px-6 max-w-2xl mx-auto space-y-8 relative">
+    <div className="pt-28 pb-96 px-6 max-w-2xl mx-auto space-y-10 relative">
       {/* Future Date Warning Toast */}
       <AnimatePresence>
         {showFutureWarning && (
@@ -1219,8 +1355,8 @@ const BillsScreen = ({
         )}
       </AnimatePresence>
 
-      {/* 1. Page Header & Time Navigator */}
-      <div className="space-y-6 px-2">
+      {/* 1. Page Header */}
+      <div className="space-y-4 px-2">
         <div className="flex justify-between items-start">
           <div className="space-y-1">
             <h2 className="text-3xl font-headline font-extrabold text-on-surface tracking-tight transition-all duration-500">
@@ -1235,26 +1371,6 @@ const BillsScreen = ({
             className="p-3 bg-surface-container-low rounded-2xl border border-outline-variant/10 shadow-sm text-primary hover:bg-surface-container-highest transition-all active:scale-90"
           >
             <Search size={24} />
-          </button>
-        </div>
-
-        <div className="flex items-center justify-between bg-surface-container-low p-1 rounded-2xl border border-outline-variant/10 shadow-sm">
-          <button 
-            onClick={() => handleNavigate(-1)} 
-            className="p-3 hover:bg-surface-container-highest rounded-xl transition-all active:scale-90 text-primary"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          <div className="flex flex-col items-center">
-            <span className="text-sm font-black text-on-surface tracking-tight">
-              {getTimeNavigatorLabel()}
-            </span>
-          </div>
-          <button 
-            onClick={() => handleNavigate(1)} 
-            className="p-3 hover:bg-surface-container-highest rounded-xl transition-all active:scale-90 text-primary"
-          >
-            <ChevronRight size={20} />
           </button>
         </div>
       </div>
@@ -1278,11 +1394,32 @@ const BillsScreen = ({
         </div>
       </section>
 
-      {/* 3. Filters */}
-      <div className="space-y-6">
-        {/* Time Filters (iOS Segmented Control Style) */}
-        <div className="flex justify-center">
-          <div className="inline-flex bg-surface-container-low p-1 rounded-2xl border border-outline-variant/10 shadow-inner w-full sm:w-auto">
+      {/* 3. Combined Time Navigator & Range Selector */}
+      <div className="bg-surface-container-low rounded-[2rem] border border-outline-variant/10 shadow-sm overflow-hidden py-1">
+        <div className="flex items-center justify-between p-1">
+          <button 
+            onClick={() => handleNavigate(-1)} 
+            className="p-3 hover:bg-surface-container-highest rounded-xl transition-all active:scale-90 text-primary"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <div className="flex flex-col items-center">
+            <span className="text-sm font-black text-on-surface tracking-tight">
+              {getTimeNavigatorLabel()}
+            </span>
+          </div>
+          <button 
+            onClick={() => handleNavigate(1)} 
+            className="p-3 hover:bg-surface-container-highest rounded-xl transition-all active:scale-90 text-primary"
+          >
+            <ChevronRight size={20} />
+          </button>
+        </div>
+        
+        <div className="h-px bg-outline-variant/5 mx-4" />
+
+        <div className="p-1">
+          <div className="flex w-full">
             {(['day', 'week', 'month', 'year'] as const).map((mode) => (
               <button
                 key={mode}
@@ -1291,17 +1428,17 @@ const BillsScreen = ({
                   setSelectedDate(new Date());
                 }}
                 className={cn(
-                  "flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 relative",
+                  "flex-1 px-4 py-2.5 rounded-[1.5rem] text-[11px] font-bold transition-all duration-300 relative",
                   viewMode === mode 
-                    ? "bg-white text-primary shadow-sm scale-[1.02] z-10" 
-                    : "text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container-highest/50"
+                    ? "text-primary z-10" 
+                    : "text-on-surface-variant/40 hover:text-on-surface hover:bg-surface-container-highest/30"
                 )}
               >
                 {mode === 'day' ? '按天' : mode === 'week' ? '按周' : mode === 'month' ? '按月' : '按年'}
                 {viewMode === mode && (
                   <motion.div 
                     layoutId="activeTab"
-                    className="absolute inset-0 bg-white rounded-xl -z-10 shadow-sm"
+                    className="absolute inset-0 bg-white rounded-[1.5rem] -z-10 shadow-sm border border-outline-variant/10"
                     transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                   />
                 )}
@@ -1309,7 +1446,10 @@ const BillsScreen = ({
             ))}
           </div>
         </div>
+      </div>
 
+      {/* 4. Filters */}
+      <div className="space-y-6">
         {/* Category Filters */}
         <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-2 px-2">
           {tags.map((tag) => (
@@ -1938,7 +2078,7 @@ const ProfileScreen = ({
   }
 
   return (
-    <div className="pt-32 pb-32 px-6 max-w-2xl mx-auto space-y-8">
+    <div className="pt-28 pb-32 px-6 max-w-2xl mx-auto space-y-8">
       <input 
         type="file" 
         ref={fileInputRef} 
@@ -3472,7 +3612,13 @@ function AppContent() {
           userAvatar={user.photoURL || 'https://picsum.photos/seed/hamster_cute_user/200/200'}
         />
         
-        <main className="flex-1 overflow-y-auto no-scrollbar relative">
+        <main 
+          className="flex-1 overflow-y-auto no-scrollbar relative"
+          style={['overview', 'bills', 'analysis'].includes(activeTab) ? {
+            WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black calc(100% - 380px), transparent calc(100% - 220px))',
+            maskImage: 'linear-gradient(to bottom, black 0%, black calc(100% - 380px), transparent calc(100% - 220px))'
+          } : undefined}
+        >
           <AnimatePresence mode="wait">
             {activeTab === 'overview' && (
               <motion.div key="overview" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
@@ -3482,6 +3628,7 @@ function AppContent() {
                   onEdit={handleEdit}
                   onDelete={deleteTransaction}
                   onView={handleView}
+                  onNavigateToBills={() => setActiveTab('bills')}
                   categories={categories}
                 />
               </motion.div>
@@ -3528,52 +3675,52 @@ function AppContent() {
         <AnimatePresence>
           {activeTab === 'overview' && (
             <motion.div 
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              className="absolute bottom-32 left-0 right-0 z-[60] flex justify-center items-start gap-8 px-6 pointer-events-none"
+              exit={{ opacity: 0, y: 40 }}
+              className="absolute bottom-[110px] left-1/2 -translate-x-1/2 z-[60] flex justify-center items-center gap-10 px-8 py-4 pointer-events-auto"
             >
-              <div className="flex flex-col items-center gap-2 pointer-events-auto">
+              <div className="flex flex-col items-center gap-2">
                 <button 
                   onClick={() => setModal('manual')} 
-                  className="w-16 h-16 rounded-full overflow-hidden bg-[#FFF9F2] border-2 border-[#F2994A]/20 shadow-xl active:scale-95 transition-transform duration-200 p-1"
+                  className="w-16 h-16 rounded-[1.5rem] overflow-hidden bg-white shadow-[0_8px_25px_rgba(0,0,0,0.08)] active:scale-90 transition-all duration-300 p-2.5 border border-outline-variant/5 flex items-center justify-center"
                 >
                   <img 
-                    src="https://api.dicebear.com/7.x/big-smile/svg?seed=hamster_pen_writing" 
+                    src="https://api.dicebear.com/7.x/big-smile/svg?seed=hamster_holding_pen_writing_cute" 
                     alt="Manual" 
                     className="w-full h-full object-contain"
                     referrerPolicy="no-referrer"
                   />
                 </button>
-                <span className="text-[10px] font-headline font-bold text-[#8B5E3C] tracking-wide">手动输入</span>
+                <span className="text-[10px] font-bold text-on-surface-variant tracking-tight">手动输入</span>
               </div>
-              <div className="flex flex-col items-center gap-2 pointer-events-auto">
+              <div className="flex flex-col items-center gap-2">
                 <button 
                   onClick={() => setModal('voice')} 
-                  className="w-16 h-16 rounded-full overflow-hidden bg-[#FFF9F2] border-2 border-[#F2994A]/20 shadow-xl active:scale-95 transition-transform duration-200 p-1"
+                  className="w-16 h-16 rounded-[1.5rem] overflow-hidden bg-white shadow-[0_8px_25px_rgba(0,0,0,0.08)] active:scale-90 transition-all duration-300 p-2.5 border border-outline-variant/5 flex items-center justify-center"
                 >
                   <img 
-                    src="https://api.dicebear.com/7.x/big-smile/svg?seed=hamster_mic_singing" 
+                    src="https://api.dicebear.com/7.x/big-smile/svg?seed=hamster_holding_microphone_singing_cute" 
                     alt="Voice" 
                     className="w-full h-full object-contain"
                     referrerPolicy="no-referrer"
                   />
                 </button>
-                <span className="text-[10px] font-headline font-bold text-[#8B5E3C] tracking-wide">语音记账</span>
+                <span className="text-[10px] font-bold text-on-surface-variant tracking-tight">语音记账</span>
               </div>
-              <div className="flex flex-col items-center gap-2 pointer-events-auto">
+              <div className="flex flex-col items-center gap-2">
                 <button 
                   onClick={() => setModal('screenshot')} 
-                  className="w-16 h-16 rounded-full overflow-hidden bg-[#FFF9F2] border-2 border-[#F2994A]/20 shadow-xl active:scale-95 transition-transform duration-200 p-1"
+                  className="w-16 h-16 rounded-[1.5rem] overflow-hidden bg-white shadow-[0_8px_25px_rgba(0,0,0,0.08)] active:scale-90 transition-all duration-300 p-2.5 border border-outline-variant/5 flex items-center justify-center"
                 >
                   <img 
-                    src="https://api.dicebear.com/7.x/big-smile/svg?seed=hamster_plus_sign" 
+                    src="https://api.dicebear.com/7.x/big-smile/svg?seed=hamster_holding_plus_sign_cute" 
                     alt="Screenshot" 
                     className="w-full h-full object-contain"
                     referrerPolicy="no-referrer"
                   />
                 </button>
-                <span className="text-[10px] font-headline font-bold text-[#8B5E3C] tracking-wide">截图导入</span>
+                <span className="text-[10px] font-bold text-on-surface-variant tracking-tight">截图导入</span>
               </div>
             </motion.div>
           )}
