@@ -53,7 +53,11 @@ import {
   ArrowLeft,
   Eye,
   EyeOff,
-  AlertCircle
+  AlertCircle,
+  Download,
+  Globe,
+  FileText,
+  ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 // import { GoogleGenAI, Type } from "@google/genai"; // Removed Gemini
@@ -727,7 +731,7 @@ const OverviewScreen = ({
   }, [monthlyStats]);
 
   return (
-    <div className="pt-28 pb-96 px-6 max-w-2xl mx-auto space-y-8 relative">
+    <div className="pt-28 pb-48 px-6 max-w-2xl mx-auto space-y-8 relative overscroll-y-contain">
       {/* Monthly Overview Card */}
       <section className="relative overflow-hidden rounded-[2.5rem] bg-white p-8 border border-outline-variant/10 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
         <div className="relative z-10 space-y-6">
@@ -789,7 +793,7 @@ const OverviewScreen = ({
           </button>
         </div>
         
-        <div className="space-y-3">
+        <div className="space-y-3 overviewRecentBillsFade">
           {recent.length > 0 ? (
             recent.map(t => (
               <TransactionItem 
@@ -942,7 +946,7 @@ const AnalysisScreen = ({
   const periodLabel = period === 'week' ? '本周' : period === 'month' ? '本月' : '本年';
 
   return (
-    <div className="pt-28 pb-96 px-6 w-full max-w-2xl mx-auto space-y-8">
+    <div className="pt-28 pb-48 px-6 w-full max-w-2xl mx-auto space-y-8">
       <div className="flex items-center justify-between"><h1 className="text-2xl font-headline font-bold text-on-surface">分析报告</h1></div>
       <div className="space-y-4">
         <div className="flex bg-surface-container-low p-1 rounded-2xl border border-outline-variant/10">
@@ -1339,7 +1343,7 @@ const BillsScreen = ({
   };
 
   return (
-    <div className="pt-28 pb-96 px-6 max-w-2xl mx-auto space-y-10 relative">
+    <div className="pt-28 pb-48 px-6 max-w-2xl mx-auto space-y-10 relative">
       {/* Future Date Warning Toast */}
       <AnimatePresence>
         {showFutureWarning && (
@@ -1601,7 +1605,8 @@ const ProfileScreen = ({
   setUserAvatar,
   budget,
   setBudget,
-  onLogout
+  onLogout,
+  onSubPageToggle
 }: { 
   categories: Category[], 
   setCategories: React.Dispatch<React.SetStateAction<Category[]>>,
@@ -1612,9 +1617,15 @@ const ProfileScreen = ({
   setUserAvatar: (avatar: string) => void,
   budget: number,
   setBudget: (budget: number) => void,
-  onLogout: () => void
+  onLogout: () => void,
+  onSubPageToggle: (active: boolean) => void
 }) => {
   const [activeSubPage, setActiveSubPage] = useState<string | null>(null);
+
+  useEffect(() => {
+    onSubPageToggle(!!activeSubPage);
+  }, [activeSubPage, onSubPageToggle]);
+
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const [tempBudget, setTempBudget] = useState(budget.toString());
@@ -1757,74 +1768,80 @@ const ProfileScreen = ({
     'category': {
       title: '分类设置',
       component: (
-        <div className="space-y-10 pt-6">
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-on-surface-variant/60">当前分类 (长按删除)</h3>
+        <div className="space-y-10">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between px-2">
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">我的分类</h3>
               <button 
                 onClick={() => setShowAddCategory(true)}
-                className="text-primary text-xs font-bold flex items-center gap-1 active:scale-95 transition-transform"
+                className="text-primary font-bold text-xs flex items-center gap-1 hover:opacity-70 transition-opacity"
               >
-                <Plus size={14} /> 添加分类
+                <Plus size={14} strokeWidth={3} />
+                添加分类
               </button>
             </div>
-            <div className="grid grid-cols-4 gap-x-4 gap-y-6">
-              {categories.map((cat) => (
-                <motion.button
-                  key={cat.id}
-                  onContextMenu={(e) => e.preventDefault()}
-                  onMouseDown={() => {
-                    const timer = setTimeout(() => setIsDeleting(cat.id), 800);
-                    (window as any)._catTimer = timer;
-                  }}
-                  onMouseUp={() => clearTimeout((window as any)._catTimer)}
-                  onTouchStart={() => {
-                    const timer = setTimeout(() => setIsDeleting(cat.id), 800);
-                    (window as any)._catTimer = timer;
-                  }}
-                  onTouchEnd={() => clearTimeout((window as any)._catTimer)}
-                  className="flex flex-col items-center gap-2 relative group"
-                >
-                  <div className={cn(
-                    "w-14 h-14 rounded-2xl flex items-center justify-center transition-all",
-                    cat.color,
-                    isDeleting === cat.id ? "scale-90 bg-error-container text-error" : "hover:scale-105 active:scale-95"
-                  )}>
-                    <CategoryIcon icon={cat.icon as any} size={24} />
-                    {isDeleting === cat.id && (
-                      <div 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setCategories(prev => prev.filter(c => c.id !== cat.id));
-                          setIsDeleting(null);
-                        }}
-                        className="absolute -top-2 -right-2 bg-error text-white rounded-full p-1 shadow-lg z-10"
-                      >
-                        <X size={12} />
-                      </div>
-                    )}
-                  </div>
-                  <span className="text-[10px] font-bold text-on-surface-variant text-center leading-tight">{cat.name}</span>
-                </motion.button>
-              ))}
+            <div className="bg-surface-container-low rounded-[2.5rem] p-8 border border-outline-variant/10">
+              <div className="grid grid-cols-4 gap-x-4 gap-y-8">
+                {categories.map((cat) => (
+                  <motion.button
+                    key={cat.id}
+                    onContextMenu={(e) => e.preventDefault()}
+                    onMouseDown={() => {
+                      const timer = setTimeout(() => setIsDeleting(cat.id), 800);
+                      (window as any)._catTimer = timer;
+                    }}
+                    onMouseUp={() => clearTimeout((window as any)._catTimer)}
+                    onTouchStart={() => {
+                      const timer = setTimeout(() => setIsDeleting(cat.id), 800);
+                      (window as any)._catTimer = timer;
+                    }}
+                    onTouchEnd={() => clearTimeout((window as any)._catTimer)}
+                    className="flex flex-col items-center gap-3 relative group"
+                  >
+                    <div className={cn(
+                      "w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-sm",
+                      cat.color,
+                      isDeleting === cat.id ? "scale-90 ring-4 ring-error/20" : "hover:scale-105 active:scale-95"
+                    )}>
+                      <CategoryIcon icon={cat.icon as any} size={24} />
+                      {isDeleting === cat.id && (
+                        <div 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCategories(prev => prev.filter(c => c.id !== cat.id));
+                            setIsDeleting(null);
+                          }}
+                          className="absolute -top-2 -right-2 bg-error text-white rounded-full p-1.5 shadow-lg z-10 border-2 border-white animate-bounce"
+                        >
+                          <X size={12} strokeWidth={3} />
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-[10px] font-bold text-on-surface-variant text-center leading-tight tracking-wide">{cat.name}</span>
+                  </motion.button>
+                ))}
+              </div>
             </div>
           </div>
 
           <AnimatePresence>
             {showAddCategory && (
               <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
-                className="bg-surface-container-low rounded-3xl p-6 space-y-6 shadow-xl border border-outline-variant"
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="fixed inset-x-6 bottom-10 z-[100] bg-white rounded-[2.5rem] p-8 space-y-8 shadow-[0_20px_60px_rgba(0,0,0,0.15)] border border-outline-variant/10"
               >
                 <div className="flex justify-between items-center">
-                  <h3 className="font-headline font-bold">选择新分类</h3>
-                  <button onClick={() => setShowAddCategory(false)} className="text-on-surface-variant p-1 hover:bg-surface-container-highest rounded-full">
+                  <div className="space-y-1">
+                    <h3 className="font-headline font-bold text-lg">添加新分类</h3>
+                    <p className="text-xs text-on-surface-variant/60 font-medium">选择一个图标来创建您的分类</p>
+                  </div>
+                  <button onClick={() => setShowAddCategory(false)} className="text-on-surface-variant/40 p-2 hover:bg-surface-container-highest rounded-full transition-colors">
                     <X size={20} />
                   </button>
                 </div>
-                <div className="grid grid-cols-4 gap-x-4 gap-y-6 max-h-72 overflow-y-auto p-2 custom-scrollbar">
+                <div className="grid grid-cols-4 gap-x-4 gap-y-8 max-h-[40vh] overflow-y-auto p-2 no-scrollbar">
                   {AVAILABLE_CATEGORIES.filter(ac => !categories.find(c => c.id === ac.id)).map((cat) => (
                     <button
                       key={cat.id}
@@ -1832,12 +1849,12 @@ const ProfileScreen = ({
                         setCategories(prev => [...prev, cat]);
                         setShowAddCategory(false);
                       }}
-                      className="flex flex-col items-center gap-2 hover:scale-105 active:scale-95 transition-all"
+                      className="flex flex-col items-center gap-3 hover:scale-105 active:scale-95 transition-all group"
                     >
-                      <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", cat.color)}>
-                        <CategoryIcon icon={cat.icon as any} size={20} />
+                      <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm transition-all group-hover:shadow-md", cat.color)}>
+                        <CategoryIcon icon={cat.icon as any} size={24} />
                       </div>
-                      <span className="text-[10px] font-bold text-on-surface-variant">{cat.name}</span>
+                      <span className="text-[10px] font-bold text-on-surface-variant tracking-wide">{cat.name}</span>
                     </button>
                   ))}
                 </div>
@@ -1850,54 +1867,67 @@ const ProfileScreen = ({
     'voice': {
       title: '语音偏好',
       component: (
-        <div className="space-y-8 pt-6">
-          <div className="bg-surface-container-low rounded-2xl p-6 space-y-6">
-            <div className="space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-on-surface-variant/60">识别语言</h3>
-              <div className="grid grid-cols-2 gap-3">
-                {['普通话', '粤语', '英语', '自动识别'].map((lang) => (
-                  <button 
-                    key={lang}
-                    onClick={() => setVoiceLang(lang)}
-                    className={cn(
-                      "py-3 rounded-xl text-sm font-bold border-2 transition-all active:scale-95",
-                      voiceLang === lang ? "border-primary bg-primary/5 text-primary" : "border-outline text-on-surface-variant hover:border-outline-variant"
-                    )}
-                  >
-                    {lang}
-                  </button>
-                ))}
-              </div>
+        <div className="space-y-10">
+          <div className="space-y-4">
+            <h3 className="px-2 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">识别语言</h3>
+            <div className="bg-surface-container-low rounded-[2rem] p-4 border border-outline-variant/10 grid grid-cols-2 gap-2">
+              {['普通话', '粤语', '英语', '自动识别'].map((lang) => (
+                <button 
+                  key={lang}
+                  onClick={() => setVoiceLang(lang)}
+                  className={cn(
+                    "py-4 rounded-2xl text-sm font-bold transition-all active:scale-95 border",
+                    voiceLang === lang 
+                      ? "bg-primary text-white border-primary shadow-lg shadow-primary/20" 
+                      : "bg-surface-container-lowest text-on-surface-variant border-outline-variant/10 hover:border-primary/30"
+                  )}
+                >
+                  {lang}
+                </button>
+              ))}
             </div>
-            <div className="pt-6 border-t border-outline-variant space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-on-surface-variant/60">高级设置</h3>
+            <p className="px-4 text-[10px] text-on-surface-variant/50 font-medium leading-relaxed">
+              选择您最常用的语言可以显著提升识别准确率。自动识别模式在多语言环境下表现更佳。
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <h3 className="px-2 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">识别行为</h3>
+            <div className="bg-surface-container-low rounded-[2rem] overflow-hidden border border-outline-variant/10">
               <div 
                 onClick={() => setAutoConfirm(!autoConfirm)}
-                className="flex items-center justify-between group cursor-pointer"
+                className="flex items-center justify-between p-6 cursor-pointer hover:bg-surface-container-highest transition-colors"
               >
-                <span className="text-sm font-medium group-active:text-primary transition-colors">自动确认识别结果</span>
+                <div className="space-y-1">
+                  <span className="text-sm font-bold block text-on-surface">自动确认识别结果</span>
+                  <span className="text-[10px] text-on-surface-variant/50 font-medium">识别完成后无需手动点击确认</span>
+                </div>
                 <div className={cn(
-                  "w-12 h-6 rounded-full relative transition-all duration-300",
-                  autoConfirm ? "bg-primary" : "bg-surface-container-highest"
+                  "w-12 h-7 rounded-full relative transition-all duration-300 p-1",
+                  autoConfirm ? "bg-secondary" : "bg-surface-container-highest"
                 )}>
                   <div className={cn(
-                    "absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-300",
-                    autoConfirm ? "right-1" : "left-1"
+                    "w-5 h-5 bg-white rounded-full shadow-sm transition-all duration-300",
+                    autoConfirm ? "translate-x-5" : "translate-x-0"
                   )} />
                 </div>
               </div>
+              <div className="mx-6 h-px bg-outline-variant/10" />
               <div 
                 onClick={() => setAutoSave(!autoSave)}
-                className="flex items-center justify-between group cursor-pointer"
+                className="flex items-center justify-between p-6 cursor-pointer hover:bg-surface-container-highest transition-colors"
               >
-                <span className="text-sm font-medium group-active:text-primary transition-colors">识别后自动保存</span>
+                <div className="space-y-1">
+                  <span className="text-sm font-bold block text-on-surface">识别后自动保存</span>
+                  <span className="text-[10px] text-on-surface-variant/50 font-medium">确认结果后直接存入账单列表</span>
+                </div>
                 <div className={cn(
-                  "w-12 h-6 rounded-full relative transition-all duration-300",
-                  autoSave ? "bg-primary" : "bg-surface-container-highest"
+                  "w-12 h-7 rounded-full relative transition-all duration-300 p-1",
+                  autoSave ? "bg-secondary" : "bg-surface-container-highest"
                 )}>
                   <div className={cn(
-                    "absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-300",
-                    autoSave ? "right-1" : "left-1"
+                    "w-5 h-5 bg-white rounded-full shadow-sm transition-all duration-300",
+                    autoSave ? "translate-x-5" : "translate-x-0"
                   )} />
                 </div>
               </div>
@@ -1909,113 +1939,144 @@ const ProfileScreen = ({
     'export': {
       title: '数据导出',
       component: (
-        <div className="space-y-8 pt-4">
-          <div className="bg-surface-container-low rounded-2xl p-6 space-y-8">
-            <div className="space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-on-surface-variant/60">导出范围</h3>
-              <div className="grid grid-cols-3 gap-3">
-                {['本月', '上月', '全部'].map((range) => (
-                  <button 
-                    key={range}
-                    onClick={() => setExportRange(range)}
-                    className={cn(
-                      "py-3 rounded-xl text-xs font-bold border-2 transition-all active:scale-95",
-                      exportRange === range ? "border-primary bg-primary/5 text-primary" : "border-outline text-on-surface-variant"
-                    )}
-                  >
-                    {range}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-on-surface-variant/60">导出格式</h3>
-              <div className="space-y-3">
-                {['Excel (.xlsx)', 'PDF (.pdf)', 'CSV (.csv)'].map((format) => (
-                  <label key={format} className="flex items-center gap-3 p-4 border border-outline rounded-xl cursor-pointer hover:bg-surface-container-highest transition-colors active:scale-[0.98]">
-                    <input 
-                      type="radio" 
-                      name="format" 
-                      className="hidden" 
-                      checked={exportFormat === format}
-                      onChange={() => setExportFormat(format)}
-                    />
-                    <div className={cn(
-                      "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
-                      exportFormat === format ? "border-primary" : "border-outline"
-                    )}>
-                      {exportFormat === format && <div className="w-2.5 h-2.5 bg-primary rounded-full" />}
-                    </div>
-                    <span className="text-sm font-medium">{format}</span>
-                  </label>
-                ))}
-              </div>
+        <div className="space-y-10">
+          <div className="space-y-4">
+            <h3 className="px-2 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">导出范围</h3>
+            <div className="bg-surface-container-low rounded-[2rem] p-4 border border-outline-variant/10 grid grid-cols-3 gap-2">
+              {['本月', '上月', '全部'].map((range) => (
+                <button 
+                  key={range}
+                  onClick={() => setExportRange(range)}
+                  className={cn(
+                    "py-4 rounded-2xl text-xs font-bold transition-all active:scale-95 border",
+                    exportRange === range 
+                      ? "bg-primary text-white border-primary shadow-lg shadow-primary/20" 
+                      : "bg-surface-container-lowest text-on-surface-variant border-outline-variant/10 hover:border-primary/30"
+                  )}
+                >
+                  {range}
+                </button>
+              ))}
             </div>
           </div>
-          <button 
-            onClick={handleExport}
-            disabled={isExporting}
-            className={cn(
-              "w-full py-4 bg-primary text-white rounded-2xl font-bold text-sm shadow-lg shadow-primary/20 transition-all active:scale-95 flex items-center justify-center gap-2",
-              isExporting && "opacity-70 cursor-not-allowed"
-            )}
-          >
-            {isExporting ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                正在导出...
-              </>
-            ) : (
-              <>
-                <Share2 size={18} />
-                生成并导出文件
-              </>
-            )}
-          </button>
+
+          <div className="space-y-4">
+            <h3 className="px-2 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">导出格式</h3>
+            <div className="bg-surface-container-low rounded-[2rem] overflow-hidden border border-outline-variant/10">
+              {[
+                { id: 'Excel (.xlsx)', desc: '最适合在电脑端进行深度财务分析' },
+                { id: 'PDF (.pdf)', desc: '适合打印或作为正式财务凭证' },
+                { id: 'CSV (.csv)', desc: '通用数据格式，适合导入其他软件' }
+              ].map((format, idx) => (
+                <React.Fragment key={format.id}>
+                  <div 
+                    onClick={() => setExportFormat(format.id)}
+                    className="flex items-center justify-between p-6 cursor-pointer hover:bg-surface-container-highest transition-colors"
+                  >
+                    <div className="space-y-1">
+                      <span className="text-sm font-bold block text-on-surface">{format.id}</span>
+                      <span className="text-[10px] text-on-surface-variant/50 font-medium">{format.desc}</span>
+                    </div>
+                    <div className={cn(
+                      "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all",
+                      exportFormat === format.id ? "border-primary bg-primary/5" : "border-outline-variant"
+                    )}>
+                      {exportFormat === format.id && <div className="w-3 h-3 bg-primary rounded-full shadow-sm" />}
+                    </div>
+                  </div>
+                  {idx < 2 && <div className="mx-6 h-px bg-outline-variant/10" />}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+
+          <div className="pt-4">
+            <button 
+              onClick={handleExport}
+              disabled={isExporting}
+              className={cn(
+                "w-full py-5 bg-primary text-white rounded-[2rem] font-black text-sm shadow-xl shadow-primary/20 transition-all active:scale-95 flex items-center justify-center gap-3",
+                isExporting && "opacity-70 cursor-not-allowed"
+              )}
+            >
+              {isExporting ? (
+                <>
+                  <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                  正在生成文件...
+                </>
+              ) : (
+                <>
+                  <Download size={20} strokeWidth={3} />
+                  立即导出数据
+                </>
+              )}
+            </button>
+            <p className="text-center mt-4 text-[10px] text-on-surface-variant/40 font-medium">
+              导出完成后，文件将自动保存至您的设备。
+            </p>
+          </div>
         </div>
       )
     },
     'about': {
       title: '关于我们',
       component: (
-        <div className="space-y-8 text-center pt-8">
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-24 h-24 rounded-3xl overflow-hidden shadow-xl shadow-primary/10 bg-white flex items-center justify-center">
-              <JijiLogo size="h-20 w-20" />
+        <div className="space-y-12">
+          <div className="flex flex-col items-center gap-6 pt-8">
+            <div className="w-28 h-28 rounded-[2.5rem] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.1)] bg-white flex items-center justify-center p-4">
+              <JijiLogo size="h-24 w-24" />
             </div>
-            <div>
-              <h2 className="text-2xl font-cute text-primary font-bold">叽叽记账</h2>
-              <p className="text-xs text-on-surface-variant/60 font-medium mt-1">Version 2.4.0 (Build 1024)</p>
+            <div className="text-center space-y-2">
+              <h2 className="text-3xl font-headline font-black text-primary tracking-tight">Alita 叽叽记账</h2>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant/40">Version 2.4.0 (Build 1024)</p>
             </div>
           </div>
-          <div className="bg-surface-container-low rounded-2xl p-6 text-left space-y-4">
-            <p className="text-sm leading-relaxed text-on-surface-variant">
-              叽叽记账是一款基于 AI 语音识别技术的智能财务管理工具。我们致力于通过最自然的方式，帮助用户轻松记录每一笔开支，实现财务自由。
+
+          <div className="space-y-6">
+            <div className="bg-surface-container-low rounded-[2.5rem] p-8 border border-outline-variant/10">
+              <p className="text-sm leading-relaxed text-on-surface-variant font-medium text-center">
+                叽叽记账是一款基于 AI 语音识别技术的智能财务管理工具。我们致力于通过最自然的方式，帮助用户轻松记录每一笔开支，实现财务自由。
+              </p>
+            </div>
+
+            <div className="bg-surface-container-low rounded-[2rem] overflow-hidden border border-outline-variant/10">
+              <SettingsRow 
+                icon={Globe} 
+                label="官方网站" 
+                sub="www.alita-app.com" 
+                onClick={() => {}} 
+                iconColor="text-primary"
+                iconBg="bg-primary/5"
+              />
+              <div className="mx-6 h-px bg-outline-variant/10" />
+              <SettingsRow 
+                icon={FileText} 
+                label="用户协议" 
+                sub="查看详细的服务条款" 
+                onClick={() => setActiveSubPage('user-agreement')} 
+                iconColor="text-secondary"
+                iconBg="bg-secondary/5"
+              />
+              <div className="mx-6 h-px bg-outline-variant/10" />
+              <SettingsRow 
+                icon={ShieldCheck} 
+                label="隐私政策" 
+                sub="了解我们如何保护您的数据" 
+                onClick={() => setActiveSubPage('privacy-policy')} 
+                iconColor="text-tertiary"
+                iconBg="bg-tertiary/5"
+              />
+            </div>
+          </div>
+
+          <div className="text-center space-y-1">
+            <p className="text-[10px] text-on-surface-variant/30 font-bold uppercase tracking-widest">
+              Made with ❤️ by Alita Tech
             </p>
-            <div className="pt-4 border-t border-outline-variant space-y-3">
-              <div className="flex justify-between text-xs">
-                <span className="text-on-surface-variant/60">官方网站</span>
-                <span className="text-primary font-bold">www.alita-app.com</span>
-              </div>
-              <button 
-                onClick={() => setActiveSubPage('user-agreement')}
-                className="w-full flex justify-between text-xs hover:text-primary transition-colors"
-              >
-                <span className="text-on-surface-variant/60">用户协议</span>
-                <ChevronRight size={14} />
-              </button>
-              <button 
-                onClick={() => setActiveSubPage('privacy-policy')}
-                className="w-full flex justify-between text-xs hover:text-primary transition-colors"
-              >
-                <span className="text-on-surface-variant/60">隐私政策</span>
-                <ChevronRight size={14} />
-              </button>
-            </div>
+            <p className="text-[10px] text-on-surface-variant/20 font-medium">
+              © 2026 Alita Tech. All Rights Reserved.
+            </p>
           </div>
-          <p className="text-[10px] text-on-surface-variant/40 font-medium">
-            © 2026 Alita Tech. All Rights Reserved.
-          </p>
         </div>
       )
     }
@@ -2062,23 +2123,30 @@ const ProfileScreen = ({
 
   if (activeSubPage && subPages[activeSubPage]) {
     return (
-      <div className="pt-32 pb-32 px-6 max-w-2xl mx-auto space-y-8">
-        <header className="flex items-center gap-4 -mb-2">
+      <div className="min-h-screen bg-surface-container-lowest flex flex-col">
+        {/* iOS Style Unified Header */}
+        <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-outline-variant/5 px-4 h-16 flex items-center justify-between">
           <button 
             onClick={() => setActiveSubPage(null)}
-            className="p-2 bg-surface-container-low rounded-full text-on-surface-variant active:scale-90 transition-transform"
+            className="w-10 h-10 flex items-center justify-center rounded-full active:scale-90 transition-transform text-on-surface"
           >
-            <ChevronLeft size={20} />
+            <ChevronLeft size={24} />
           </button>
-          <h2 className="font-headline font-bold text-xl">{subPages[activeSubPage].title}</h2>
+          <h2 className="font-headline font-bold text-base absolute left-1/2 -translate-x-1/2">
+            {subPages[activeSubPage].title}
+          </h2>
+          <div className="w-10" /> {/* Spacer for symmetry */}
         </header>
-        {subPages[activeSubPage].component}
+
+        <main className="flex-1 overflow-y-auto px-6 py-8 max-w-2xl mx-auto w-full">
+          {subPages[activeSubPage].component}
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="pt-28 pb-32 px-6 max-w-2xl mx-auto space-y-8">
+    <div className="pt-24 pb-48 px-6 max-w-2xl mx-auto space-y-10">
       <input 
         type="file" 
         ref={fileInputRef} 
@@ -2086,11 +2154,13 @@ const ProfileScreen = ({
         accept="image/*" 
         className="hidden" 
       />
-      <section className="flex flex-col items-center justify-center text-center space-y-4 pt-6">
-        <div className="relative">
+      
+      {/* User Information Summary - Profile Summary Style */}
+      <section className="flex items-center gap-5 px-2">
+        <div className="relative group">
           <div 
             onClick={handleAvatarClick}
-            className="w-24 h-24 rounded-full overflow-hidden bg-surface-container-highest ring-4 ring-white shadow-lg cursor-pointer active:scale-95 transition-transform"
+            className="w-20 h-20 rounded-full overflow-hidden bg-surface-container-highest ring-2 ring-primary/10 shadow-sm cursor-pointer active:scale-95 transition-transform"
           >
             <img 
               src={userAvatar} 
@@ -2099,30 +2169,36 @@ const ProfileScreen = ({
               referrerPolicy="no-referrer"
             />
           </div>
-          <div className="absolute bottom-0 right-0 bg-secondary text-white rounded-full p-1.5 border-2 border-white">
-            <CheckCircle2 size={16} fill="currentColor" />
+          <div className="absolute -bottom-1 -right-1 bg-primary text-white rounded-full p-1 border-2 border-white shadow-sm">
+            <Sparkles size={12} fill="currentColor" />
           </div>
         </div>
-        <div>
-          <h2 
-            onClick={handleNameClick}
-            className="font-headline font-bold text-2xl tracking-tight cursor-pointer hover:text-primary transition-colors"
-          >
-            {userName}
-          </h2>
-          <p className="font-label text-sm text-on-surface-variant/70 tracking-wide mt-1">Alita Premium Member</p>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <h2 
+              onClick={handleNameClick}
+              className="font-headline font-bold text-2xl tracking-tight cursor-pointer hover:text-primary transition-colors"
+            >
+              {userName}
+            </h2>
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-bold rounded-md uppercase tracking-wider">Premium</span>
+            <span className="text-xs text-on-surface-variant/60 font-medium">ID: {auth.currentUser?.uid.slice(0, 8).toUpperCase()}</span>
+          </div>
         </div>
       </section>
 
+      {/* Core Statistics - Summary Metrics Style */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-surface-container-low p-4 rounded-2xl text-center">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60 mb-1">记账天数</p>
-          <p className="text-2xl font-headline font-extrabold">{stats.days}</p>
+        <div className="bg-surface-container-low p-5 rounded-3xl border border-outline-variant/10 flex flex-col items-center justify-center space-y-1">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/50">记账天数</span>
+          <p className="text-2xl font-headline font-black text-on-surface">{stats.days}</p>
         </div>
-        <div className="bg-surface-container-low p-4 rounded-2xl text-center">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/60 mb-1">本月结余</p>
+        <div className="bg-surface-container-low p-5 rounded-3xl border border-outline-variant/10 flex flex-col items-center justify-center space-y-1">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/50">本月结余</span>
           <p className={cn(
-            "text-2xl font-headline font-extrabold",
+            "text-2xl font-headline font-black",
             stats.balance >= 0 ? "text-secondary" : "text-error"
           )}>
             ¥{formatAmount(stats.balance)}
@@ -2130,119 +2206,172 @@ const ProfileScreen = ({
         </div>
       </div>
 
-      <section className="relative bg-surface-container-lowest rounded-xl p-8 shadow-[0_20px_40px_0_rgba(0,0,0,0.03)] overflow-hidden">
-        <div className="flex justify-between items-start mb-4">
+      {/* Financial Health Insight Card */}
+      <section className="bg-white rounded-[2.5rem] p-8 border border-outline-variant/10 shadow-[0_8px_30px_rgba(0,0,0,0.02)]">
+        <div className="flex items-center justify-between mb-8">
           <div className="space-y-1">
-            <h3 className="font-headline font-bold text-lg">预算健康度</h3>
-            <div className="flex items-center gap-2">
-              {isEditingBudget ? (
-                <div className="flex items-center gap-1">
-                  <input 
-                    type="number" 
-                    value={tempBudget}
-                    onChange={(e) => setTempBudget(e.target.value)}
-                    className="w-20 px-2 py-0.5 text-xs bg-surface-container-low border border-primary rounded outline-none"
-                    autoFocus
-                  />
-                  <button onClick={handleBudgetSave} className="text-[10px] text-secondary font-bold">保存</button>
-                  <button onClick={handleBudgetCancel} className="text-[10px] text-on-surface-variant font-bold">取消</button>
-                </div>
-              ) : (
-                <p className="text-[10px] text-on-surface-variant font-medium">
-                  当前预算: ¥{formatAmount(budget)} 
-                  <span 
-                    onClick={() => {
-                      setTempBudget(budget.toString());
-                      setIsEditingBudget(true);
-                    }} 
-                    className="text-primary cursor-pointer ml-1 underline"
-                  >
-                    修改
-                  </span>
-                </p>
-              )}
-            </div>
+            <h3 className="font-headline font-bold text-lg text-on-surface">财务健康洞察</h3>
+            <p className="text-xs text-on-surface-variant/60 font-medium">基于本月预算执行情况</p>
           </div>
-          <span className={cn(
-            "px-3 py-1 rounded-full text-xs font-bold",
-            stats.health > 70 ? "bg-secondary-container text-on-secondary-container" : 
-            stats.health > 30 ? "bg-tertiary-container text-on-tertiary-container" : 
-            "bg-error-container text-error"
+          <div className={cn(
+            "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider",
+            stats.health > 70 ? "bg-secondary/10 text-secondary" : 
+            stats.health > 30 ? "bg-primary/10 text-primary" : 
+            "bg-error/10 text-error"
           )}>
-            {stats.health > 70 ? '良好' : stats.health > 30 ? '一般' : '预警'}
-          </span>
+            {stats.health > 70 ? '执行良好' : stats.health > 30 ? '节奏稳定' : '预算预警'}
+          </div>
         </div>
-        <div className="relative flex justify-center py-4">
-          <div className="relative w-40 h-40">
+
+        <div className="flex items-center gap-8">
+          <div className="relative w-32 h-32 flex-shrink-0">
             <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-              <circle className="text-surface-container" cx="18" cy="18" r="16" fill="none" stroke="currentColor" strokeWidth="3" />
+              <circle className="text-surface-container-highest" cx="18" cy="18" r="16" fill="none" stroke="currentColor" strokeWidth="3.5" />
               <circle 
                 className={cn(
-                  stats.health > 70 ? "text-secondary" : stats.health > 30 ? "text-tertiary" : "text-error"
+                  "transition-all duration-1000 ease-out",
+                  stats.health > 70 ? "text-secondary" : stats.health > 30 ? "text-primary" : "text-error"
                 )} 
-                cx="18" cy="18" r="16" fill="none" stroke="currentColor" strokeWidth="3" 
+                cx="18" cy="18" r="16" fill="none" stroke="currentColor" strokeWidth="3.5" 
                 strokeDasharray="100" 
                 strokeDashoffset={100 - stats.health} 
                 strokeLinecap="round" 
               />
             </svg>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-3xl font-headline font-extrabold">{stats.health}%</span>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-xs font-bold text-on-surface-variant/40 uppercase tracking-tighter">评分</span>
+              <span className="text-3xl font-headline font-black leading-none">{stats.health}</span>
+            </div>
+          </div>
+
+          <div className="flex-1 space-y-4">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-on-surface-variant/60 font-medium">当前预算</span>
+                <button 
+                  onClick={() => {
+                    setTempBudget(budget.toString());
+                    setIsEditingBudget(true);
+                  }}
+                  className="text-primary font-bold hover:underline"
+                >
+                  ¥{formatAmount(budget)}
+                </button>
+              </div>
+              {isEditingBudget && (
+                <div className="flex items-center gap-2 mt-2">
+                  <input 
+                    type="number" 
+                    value={tempBudget}
+                    onChange={(e) => setTempBudget(e.target.value)}
+                    className="flex-1 px-3 py-2 text-sm bg-surface-container-low border border-outline-variant rounded-xl outline-none focus:border-primary"
+                    autoFocus
+                  />
+                  <button onClick={handleBudgetSave} className="p-2 text-secondary"><Check size={20} /></button>
+                  <button onClick={handleBudgetCancel} className="p-2 text-on-surface-variant"><X size={20} /></button>
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 bg-surface-container-lowest rounded-2xl border border-outline-variant/5">
+              <p className="text-xs font-medium leading-relaxed text-on-surface-variant">
+                {stats.days === 0 ? (
+                  "开始记录第一笔账单，开启您的财务健康之旅。"
+                ) : stats.health > 0 ? (
+                  <>支出节奏稳定，预计本月可节省 <span className="text-secondary font-black">¥{formatAmount(stats.estimatedSavings)}</span></>
+                ) : (
+                  "您的支出已超出预算，建议立即优化消费结构。"
+                )}
+              </p>
             </div>
           </div>
         </div>
-        <div className="bg-tertiary-container/10 border-l-4 border-tertiary-container p-4 rounded-r-lg mt-4 backdrop-blur-sm">
-          <p className="font-body text-sm leading-relaxed text-on-tertiary-container">
-            {stats.days === 0 ? (
-              <>您还没有记账记录，开始记录第一笔账单吧！</>
-            ) : stats.health > 0 ? (
-              <>您的支出节奏{stats.health > 70 ? '良好' : '尚可'}，预计本月可节省 <span className="font-bold text-lg">¥{formatAmount(stats.estimatedSavings)}</span></>
-            ) : (
-              <>您的支出已超出预算，请注意控制开支。</>
-            )}
-          </p>
-        </div>
       </section>
 
-      <section className="space-y-3">
-        {[
-          { id: 'category', icon: LayoutGrid, label: '分类设置', sub: '自定义您的记账类别' },
-          { id: 'voice', icon: Mic, label: '语音偏好', sub: '设置您的语音识别习惯' },
-          { id: 'export', icon: Share2, label: '数据导出', sub: '导出为 Excel 或 PDF' },
-          { id: 'about', icon: HelpCircle, label: '关于我们', sub: '了解 Alita 的故事' },
-        ].map((item, i) => (
-          <div 
-            key={i} 
-            onClick={() => setActiveSubPage(item.id)}
-            className="flex items-center justify-between p-5 bg-surface-container-low rounded-2xl hover:bg-surface-container-highest transition-colors cursor-pointer group"
+      {/* Settings List - Grouped Rows Style */}
+      <div className="space-y-8">
+        <div className="space-y-3">
+          <h4 className="px-2 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">记账设置</h4>
+          <div className="bg-surface-container-low rounded-[2rem] overflow-hidden border border-outline-variant/10">
+            <SettingsRow 
+              icon={LayoutGrid} 
+              label="分类设置" 
+              sub="自定义您的记账类别" 
+              onClick={() => setActiveSubPage('category')} 
+              iconColor="text-primary"
+              iconBg="bg-primary/10"
+            />
+            <div className="mx-6 h-px bg-outline-variant/10" />
+            <SettingsRow 
+              icon={Mic} 
+              label="语音偏好" 
+              sub="设置您的语音识别习惯" 
+              onClick={() => setActiveSubPage('voice')} 
+              iconColor="text-secondary"
+              iconBg="bg-secondary/10"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <h4 className="px-2 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">数据管理</h4>
+          <div className="bg-surface-container-low rounded-[2rem] overflow-hidden border border-outline-variant/10">
+            <SettingsRow 
+              icon={Share2} 
+              label="数据导出" 
+              sub="导出为 Excel 或 PDF" 
+              onClick={() => setActiveSubPage('export')} 
+              iconColor="text-tertiary"
+              iconBg="bg-tertiary/10"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <h4 className="px-2 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">关于与支持</h4>
+          <div className="bg-surface-container-low rounded-[2rem] overflow-hidden border border-outline-variant/10">
+            <SettingsRow 
+              icon={HelpCircle} 
+              label="关于我们" 
+              sub="了解 Alita 的故事" 
+              onClick={() => setActiveSubPage('about')} 
+              iconColor="text-on-surface-variant"
+              iconBg="bg-surface-container-highest"
+            />
+          </div>
+        </div>
+
+        <div className="pt-4">
+          <button 
+            onClick={onLogout}
+            className="w-full py-5 bg-error/5 text-error rounded-[2rem] font-black text-sm flex items-center justify-center gap-3 active:scale-95 transition-transform border border-error/10"
           >
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center text-secondary">
-                <item.icon size={20} />
-              </div>
-              <div>
-                <span className="font-body font-bold block text-sm">{item.label}</span>
-                <span className="text-[10px] text-on-surface-variant/60 font-medium">{item.sub}</span>
-              </div>
-            </div>
-            <ChevronRight className="text-outline-variant group-hover:text-primary transition-colors" size={20} />
-          </div>
-        ))}
-      </section>
-
-      <section className="mt-4">
-        <button 
-          onClick={onLogout}
-          className="w-full py-4 bg-surface-container-highest text-tertiary rounded-full font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
-        >
-          <LogOut size={20} />
-          退出登录
-        </button>
-      </section>
-
+            <LogOut size={20} />
+            退出登录
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
+
+const SettingsRow = ({ icon: Icon, label, sub, onClick, iconColor, iconBg }: any) => (
+  <div 
+    onClick={onClick}
+    className="flex items-center justify-between p-5 hover:bg-surface-container-highest transition-colors cursor-pointer group"
+  >
+    <div className="flex items-center gap-4">
+      <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center", iconBg, iconColor)}>
+        <Icon size={20} />
+      </div>
+      <div>
+        <span className="font-headline font-bold block text-sm text-on-surface">{label}</span>
+        <span className="text-[10px] text-on-surface-variant/50 font-medium tracking-wide">{sub}</span>
+      </div>
+    </div>
+    <ChevronRight className="text-outline-variant group-hover:text-primary transition-all group-hover:translate-x-1" size={18} />
+  </div>
+);
 
 // --- Modals ---
 
@@ -3353,6 +3482,8 @@ function AppContent() {
     setViewingTransaction(transaction);
   };
 
+  const [isSubPageActive, setIsSubPageActive] = useState(false);
+
   const screenTitle = useMemo(() => {
     switch (activeTab) {
       case 'overview': return '叽叽记账';
@@ -3613,11 +3744,10 @@ function AppContent() {
         />
         
         <main 
-          className="flex-1 overflow-y-auto no-scrollbar relative"
-          style={['overview', 'bills', 'analysis'].includes(activeTab) ? {
-            WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black calc(100% - 380px), transparent calc(100% - 220px))',
-            maskImage: 'linear-gradient(to bottom, black 0%, black calc(100% - 380px), transparent calc(100% - 220px))'
-          } : undefined}
+          className={cn(
+            "flex-1 overflow-y-auto no-scrollbar relative overscroll-behavior-y-auto",
+            activeTab === 'overview' && "overview-viewport-mask"
+          )}
         >
           <AnimatePresence mode="wait">
             {activeTab === 'overview' && (
@@ -3665,6 +3795,7 @@ function AppContent() {
                   budget={budget}
                   setBudget={setBudget}
                   onLogout={handleLogout}
+                  onSubPageToggle={setIsSubPageActive}
                 />
               </motion.div>
             )}
@@ -3726,7 +3857,7 @@ function AppContent() {
           )}
         </AnimatePresence>
 
-        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+        {!isSubPageActive && <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />}
 
         <AnimatePresence>
           {modal === 'manual' && (
