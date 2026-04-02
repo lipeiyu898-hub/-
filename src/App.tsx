@@ -3532,7 +3532,7 @@ function AppContent() {
   const [loginError, setLoginError] = useState<string | null>(null);
 
   // Login states
-  const [loginMode, setLoginMode] = useState<'google' | 'email' | 'register' | 'phone'>('google');
+  const [loginMode, setLoginMode] = useState<'landing' | 'google' | 'email' | 'register' | 'phone'>('landing');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -3837,69 +3837,210 @@ function AppContent() {
   if (!user) {
     return (
       <div className="min-h-screen bg-zinc-100 flex justify-center items-center p-0 sm:p-4 md:p-8">
-        <div className="relative w-full max-w-[440px] h-full sm:h-[952px] bg-background overflow-hidden sm:rounded-[3.5rem] sm:shadow-[0_0_0_12px_#1a1a1a,0_20px_50px_rgba(0,0,0,0.3)] flex flex-col items-center justify-center p-8 text-center space-y-6">
+        <div className="relative w-full max-w-[440px] h-full sm:h-[952px] bg-background overflow-hidden sm:rounded-[3.5rem] sm:shadow-[0_0_0_12px_#1a1a1a,0_20px_50px_rgba(0,0,0,0.3)] flex flex-col items-center p-8 text-center">
           <div id="recaptcha-container"></div>
           
-          <div className="flex flex-col items-center space-y-4 mb-4">
-            <JijiLogo size="h-24 w-24" />
-            <h1 className="text-3xl font-cute text-primary font-bold">叽叽记账</h1>
+          {/* Top Brand Area */}
+          <div className="flex flex-col items-center space-y-3 mt-12 mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
+            <div className="w-16 h-16 bg-primary/5 rounded-2xl flex items-center justify-center p-3">
+              <JijiLogo size="h-full w-full" />
+            </div>
+            <div className="space-y-1">
+              <h1 className="text-2xl font-cute text-primary font-bold tracking-tight">叽叽记账</h1>
+              <p className="text-[11px] text-on-surface-variant/40 font-bold uppercase tracking-[0.2em]">AI 智能记账助手</p>
+            </div>
+          </div>
+
+          {/* Central Illustration Area */}
+          <div className="flex-1 w-full flex flex-col items-center justify-center py-4 animate-in fade-in zoom-in-95 duration-1000 delay-200">
+            <div className="relative w-full max-w-[280px] aspect-square flex items-center justify-center">
+              {/* Decorative circles */}
+              <div className="absolute inset-0 bg-primary/5 rounded-full animate-pulse" />
+              <div className="absolute inset-4 bg-primary/5 rounded-full animate-pulse delay-75" />
+              <div className="absolute inset-8 bg-primary/5 rounded-full animate-pulse delay-150" />
+              
+              {/* Main Illustration */}
+              <div className="relative z-10 w-48 h-48 drop-shadow-2xl">
+                <img 
+                  src="https://api.dicebear.com/7.x/big-smile/svg?seed=hamster_holding_coin_cute_orange" 
+                  alt="Jiji Hamster" 
+                  className="w-full h-full object-contain"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+              
+              {/* Floating elements */}
+              <motion.div 
+                animate={{ y: [0, -10, 0] }}
+                transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+                className="absolute top-4 right-4 w-12 h-12 bg-white rounded-2xl shadow-lg flex items-center justify-center p-2 border border-primary/10"
+              >
+                <LucideIcons.Sparkles className="text-primary" size={20} />
+              </motion.div>
+              <motion.div 
+                animate={{ y: [0, 10, 0] }}
+                transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
+                className="absolute bottom-10 left-0 w-14 h-14 bg-white rounded-2xl shadow-lg flex items-center justify-center p-2 border border-primary/10"
+              >
+                <LucideIcons.TrendingUp className="text-secondary" size={24} />
+              </motion.div>
+            </div>
+            
+            <div className="mt-8 space-y-2">
+              <h2 className="text-xl font-headline font-bold text-on-surface">欢迎回来</h2>
+              <p className="text-sm text-on-surface-variant/60 font-medium">登录后即可同步您的账单与分析数据</p>
+            </div>
           </div>
           
-          <div className="w-full space-y-4">
+          <div className="w-full space-y-4 mt-auto">
             {loginError && (
-              <div className="w-full p-4 bg-error-container text-error rounded-2xl text-sm font-medium animate-in fade-in slide-in-from-top-2">
+              <div className="w-full p-4 mb-4 bg-error-container text-error rounded-2xl text-sm font-medium animate-in fade-in slide-in-from-top-2">
                 {loginError}
               </div>
             )}
 
-            {loginMode === 'google' && (
-              <div className="space-y-4">
-                <p className="text-on-surface-variant font-medium text-sm">欢迎使用叽叽记账，请登录以同步您的账单数据。</p>
+            {loginMode === 'landing' && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                {/* Primary: WeChat */}
                 <button 
-                  onClick={handleGoogleLogin}
-                  disabled={isLoading}
-                  className="w-full py-4 bg-primary text-white rounded-full font-bold shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50"
+                  onClick={() => {
+                    // Mock WeChat Login
+                    setLoginError("微信登录环境初始化中，请稍后重试或使用其他方式。");
+                  }}
+                  className="w-full py-4.5 bg-[#07C160] text-white rounded-[2rem] font-bold shadow-xl shadow-green-500/20 flex items-center justify-center gap-3 active:scale-95 transition-all"
                 >
-                  {isLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <LucideIcons.LogIn size={20} />}
-                  使用 Google 账号登录
+                  <LucideIcons.MessageCircle size={22} fill="currentColor" />
+                  微信一键登录
                 </button>
-                
-                <div className="flex items-center gap-4 py-2">
-                  <div className="flex-1 h-px bg-outline-variant" />
-                  <span className="text-xs text-on-surface-variant/60 font-bold uppercase tracking-widest">或者使用</span>
-                  <div className="flex-1 h-px bg-outline-variant" />
-                </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <button 
-                    onClick={() => setLoginMode('email')}
-                    className="py-4 bg-surface-container-low text-on-surface rounded-3xl font-bold flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform border border-outline-variant"
-                  >
-                    <Mail size={20} className="text-primary" />
-                    <span className="text-xs">邮箱登录</span>
-                  </button>
-                  <button 
-                    onClick={() => setLoginMode('phone')}
-                    className="py-4 bg-surface-container-low text-on-surface rounded-3xl font-bold flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform border border-outline-variant"
-                  >
-                    <Smartphone size={20} className="text-secondary" />
-                    <span className="text-xs">手机登录</span>
-                  </button>
+                {/* Secondary: Phone */}
+                <button 
+                  onClick={() => setLoginMode('phone')}
+                  className="w-full py-4.5 bg-surface-container-high text-on-surface rounded-[2rem] font-bold border border-outline-variant/30 flex items-center justify-center gap-3 active:scale-95 transition-all"
+                >
+                  <LucideIcons.Smartphone size={20} />
+                  手机号登录
+                </button>
+
+                {/* Tertiary: Others */}
+                <div className="pt-6">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="flex-1 h-px bg-outline-variant/30" />
+                    <span className="text-[10px] text-on-surface-variant/30 font-bold uppercase tracking-[0.2em]">其他登录方式</span>
+                    <div className="flex-1 h-px bg-outline-variant/30" />
+                  </div>
+
+                  <div className="flex justify-center gap-10">
+                    <button 
+                      onClick={() => setLoginMode('email')}
+                      className="flex flex-col items-center gap-2 group"
+                    >
+                      <div className="w-12 h-12 rounded-full bg-surface-container-low border border-outline-variant/50 flex items-center justify-center text-primary group-active:scale-90 transition-transform">
+                        <LucideIcons.Mail size={20} />
+                      </div>
+                      <span className="text-[10px] font-bold text-on-surface-variant/40">邮箱</span>
+                    </button>
+                    <button 
+                      onClick={handleGoogleLogin}
+                      className="flex flex-col items-center gap-2 group"
+                    >
+                      <div className="w-12 h-12 rounded-full bg-surface-container-low border border-outline-variant/50 flex items-center justify-center group-active:scale-90 transition-transform">
+                        <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
+                      </div>
+                      <span className="text-[10px] font-bold text-on-surface-variant/40">Google</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
 
-            {(loginMode === 'email' || loginMode === 'register') && (
-              <form onSubmit={loginMode === 'email' ? handleEmailLogin : handleEmailRegister} className="space-y-4 text-left">
+            {loginMode === 'phone' && (
+              <div className="space-y-6 text-left animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="flex items-center gap-2 mb-2">
-                  <button type="button" onClick={() => setLoginMode('google')} className="p-2 hover:bg-surface-container rounded-full">
-                    <ArrowLeft size={20} />
+                  <button onClick={() => setLoginMode('landing')} className="p-2 -ml-2 hover:bg-surface-container rounded-full transition-colors">
+                    <LucideIcons.ArrowLeft size={20} />
+                  </button>
+                  <h2 className="text-xl font-bold font-headline">手机号登录</h2>
+                </div>
+                {!isVerifying ? (
+                  <form onSubmit={handleSendCode} className="space-y-6">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-on-surface-variant ml-1">手机号码</label>
+                      <div className="relative">
+                        <Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40" size={18} />
+                        <input 
+                          type="tel" 
+                          value={phoneNumber}
+                          onChange={(e) => setPhoneNumber(e.target.value)}
+                          placeholder="请输入手机号"
+                          className="w-full pl-12 pr-4 py-4 bg-surface-container-low rounded-2xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all font-medium text-lg"
+                          required
+                        />
+                      </div>
+                      <p className="text-[10px] text-on-surface-variant/40 ml-1">支持中国大陆手机号，需包含 +86</p>
+                    </div>
+
+                    <button 
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full py-4.5 bg-primary text-white rounded-full font-bold shadow-xl shadow-primary/20 flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-50"
+                    >
+                      {isLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : null}
+                      获取验证码
+                    </button>
+                  </form>
+                ) : (
+                  <form onSubmit={handleVerifyCode} className="space-y-6">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between px-1">
+                        <label className="text-xs font-bold text-on-surface-variant">验证码</label>
+                        <button type="button" onClick={() => setIsVerifying(false)} className="text-xs text-primary font-bold">修改手机号</button>
+                      </div>
+                      <div className="relative">
+                        <CheckCircle2 className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40" size={18} />
+                        <input 
+                          type="text" 
+                          value={verificationCode}
+                          onChange={(e) => setVerificationCode(e.target.value)}
+                          placeholder="输入 6 位验证码"
+                          className="w-full pl-12 pr-4 py-4 bg-surface-container-low rounded-2xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all font-medium text-center tracking-[0.5em] text-xl"
+                          maxLength={6}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <button 
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full py-4.5 bg-primary text-white rounded-full font-bold shadow-xl shadow-primary/20 flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-50"
+                    >
+                      {isLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : null}
+                      立即登录
+                    </button>
+
+                    <button 
+                      type="button"
+                      onClick={handleSendCode}
+                      className="w-full text-center text-sm text-on-surface-variant/60 font-bold"
+                    >
+                      重新发送验证码
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
+
+            {(loginMode === 'email' || loginMode === 'register') && (
+              <form onSubmit={loginMode === 'email' ? handleEmailLogin : handleEmailRegister} className="space-y-6 text-left animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="flex items-center gap-2 mb-2">
+                  <button onClick={() => setLoginMode('landing')} className="p-2 -ml-2 hover:bg-surface-container rounded-full transition-colors">
+                    <LucideIcons.ArrowLeft size={20} />
                   </button>
                   <h2 className="text-xl font-bold font-headline">{loginMode === 'email' ? '邮箱登录' : '创建账号'}</h2>
                 </div>
-                
                 <div className="space-y-4">
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <label className="text-xs font-bold text-on-surface-variant ml-1">邮箱地址</label>
                     <div className="relative">
                       <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40" size={18} />
@@ -3914,7 +4055,7 @@ function AppContent() {
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <label className="text-xs font-bold text-on-surface-variant ml-1">密码</label>
                     <div className="relative">
                       <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40" size={18} />
@@ -3940,104 +4081,36 @@ function AppContent() {
                 <button 
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-4 bg-primary text-white rounded-full font-bold shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50 mt-4"
+                  className="w-full py-4.5 bg-primary text-white rounded-full font-bold shadow-xl shadow-primary/20 flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-50"
                 >
                   {isLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : null}
                   {loginMode === 'email' ? '立即登录' : '注册账号'}
                 </button>
 
-                <p className="text-center text-sm text-on-surface-variant">
-                  {loginMode === 'email' ? '还没有账号？' : '已有账号？'}
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-sm text-on-surface-variant/60">{loginMode === 'email' ? '还没有账号？' : '已有账号？'}</span>
                   <button 
                     type="button" 
                     onClick={() => setLoginMode(loginMode === 'email' ? 'register' : 'email')}
-                    className="text-primary font-bold ml-1"
+                    className="text-primary font-bold text-sm"
                   >
                     {loginMode === 'email' ? '立即注册' : '返回登录'}
                   </button>
-                </p>
-              </form>
-            )}
-
-            {loginMode === 'phone' && (
-              <div className="space-y-4 text-left">
-                <div className="flex items-center gap-2 mb-2">
-                  <button type="button" onClick={() => { setLoginMode('google'); setIsVerifying(false); }} className="p-2 hover:bg-surface-container rounded-full">
-                    <ArrowLeft size={20} />
-                  </button>
-                  <h2 className="text-xl font-bold font-headline">手机登录</h2>
                 </div>
-
-                {!isVerifying ? (
-                  <form onSubmit={handleSendCode} className="space-y-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-on-surface-variant ml-1">手机号码</label>
-                      <div className="relative">
-                        <Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40" size={18} />
-                        <input 
-                          type="tel" 
-                          value={phoneNumber}
-                          onChange={(e) => setPhoneNumber(e.target.value)}
-                          placeholder="+8613800138000"
-                          className="w-full pl-12 pr-4 py-4 bg-surface-container-low rounded-2xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all font-medium"
-                          required
-                        />
-                      </div>
-                      <p className="text-[10px] text-on-surface-variant/60 ml-1">请包含国家代码，例如中国手机号：+86138...</p>
-                    </div>
-
-                    <button 
-                      type="submit"
-                      disabled={isLoading}
-                      className="w-full py-4 bg-primary text-white rounded-full font-bold shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50"
-                    >
-                      {isLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : null}
-                      发送验证码
-                    </button>
-                  </form>
-                ) : (
-                  <form onSubmit={handleVerifyCode} className="space-y-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-on-surface-variant ml-1">验证码</label>
-                      <div className="relative">
-                        <CheckCircle2 className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40" size={18} />
-                        <input 
-                          type="text" 
-                          value={verificationCode}
-                          onChange={(e) => setVerificationCode(e.target.value)}
-                          placeholder="输入 6 位验证码"
-                          className="w-full pl-12 pr-4 py-4 bg-surface-container-low rounded-2xl border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all font-medium text-center tracking-[0.5em] text-lg"
-                          maxLength={6}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <button 
-                      type="submit"
-                      disabled={isLoading}
-                      className="w-full py-4 bg-primary text-white rounded-full font-bold shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-50"
-                    >
-                      {isLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : null}
-                      确认登录
-                    </button>
-
-                    <button 
-                      type="button"
-                      onClick={() => setIsVerifying(false)}
-                      className="w-full text-center text-sm text-primary font-bold"
-                    >
-                      重新发送验证码
-                    </button>
-                  </form>
-                )}
-              </div>
+              </form>
             )}
           </div>
           
-          <p className="text-[10px] text-on-surface-variant/40 font-medium">
-            登录即代表您同意我们的 <span className="underline">服务协议</span> 和 <span className="underline">隐私政策</span>
-          </p>
+          <div className="mt-12 space-y-2">
+            <p className="text-[10px] text-on-surface-variant/40 font-medium">
+              登录即代表您同意我们的
+            </p>
+            <div className="flex items-center justify-center gap-2 text-[10px] font-bold text-on-surface-variant/60">
+              <span className="hover:text-primary transition-colors cursor-pointer underline decoration-primary/20 underline-offset-2">服务协议</span>
+              <span className="w-1 h-1 bg-on-surface-variant/20 rounded-full" />
+              <span className="hover:text-primary transition-colors cursor-pointer underline decoration-primary/20 underline-offset-2">隐私政策</span>
+            </div>
+          </div>
         </div>
       </div>
     );
