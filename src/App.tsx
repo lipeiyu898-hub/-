@@ -57,7 +57,9 @@ import {
   Download,
   Globe,
   FileText,
-  ShieldCheck
+  ShieldCheck,
+  Delete,
+  RotateCcw,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 // import { GoogleGenAI, Type } from "@google/genai"; // Removed Gemini
@@ -276,7 +278,7 @@ const Header = ({ title, showMenu = true, onMenuClick, userAvatar, onAvatarClick
   </header>
 );
 
-const Sidebar = ({ isOpen, onClose, onNavigate, userName, userAvatar }: { isOpen: boolean, onClose: () => void, onNavigate: (tab: string) => void, userName: string, userAvatar: string }) => {
+const Sidebar = ({ isOpen, onClose, onNavigate, activeTab, userName, userAvatar, onLogout }: { isOpen: boolean, onClose: () => void, onNavigate: (tab: string) => void, activeTab: string, userName: string, userAvatar: string, onLogout: () => void }) => {
   const menuItems = [
     { id: 'overview', label: '首页概览', icon: LayoutGrid },
     { id: 'bills', label: '账单明细', icon: ReceiptText },
@@ -293,41 +295,72 @@ const Sidebar = ({ isOpen, onClose, onNavigate, userName, userAvatar }: { isOpen
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[150]"
+            className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-[150]"
           />
           <motion.div 
             initial={{ x: '-100%' }}
             animate={{ x: 0 }}
             exit={{ x: '-100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed top-0 left-0 bottom-0 w-[280px] bg-background z-[160] shadow-2xl flex flex-col p-8"
+            transition={{ type: 'spring', damping: 28, stiffness: 220 }}
+            className="fixed top-0 left-0 bottom-0 w-[260px] bg-background z-[160] shadow-[10px_0_40px_rgba(0,0,0,0.04)] flex flex-col p-6"
           >
-            <div className="flex items-center gap-4 mb-12">
-              <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-white shadow-lg shadow-primary/20 overflow-hidden">
-                <JijiLogo size="h-10" />
+            {/* Brand Area */}
+            <div className="flex flex-col gap-1 mb-10 px-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/15 overflow-hidden shrink-0">
+                  <JijiLogo size="h-8" />
+                </div>
+                <span className="font-cute text-primary text-xl font-bold tracking-tight">叽叽记账</span>
               </div>
-              <span className="font-cute text-primary text-2xl font-bold">叽叽记账</span>
+              <p className="text-[10px] text-on-surface-variant/40 font-bold tracking-widest uppercase ml-13">AI 智能记账助手</p>
             </div>
 
-            <nav className="flex-1 space-y-2">
-              {menuItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    onNavigate(item.id);
-                    onClose();
-                  }}
-                  className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-surface-container-low transition-colors group"
-                >
-                  <item.icon size={20} className="text-on-surface-variant group-hover:text-primary transition-colors" />
-                  <span className="font-body font-bold text-sm text-on-surface-variant group-hover:text-on-surface transition-colors">{item.label}</span>
-                </button>
-              ))}
+            {/* Navigation Menu */}
+            <nav className="flex-1 space-y-1">
+              {menuItems.map((item) => {
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      onNavigate(item.id);
+                      onClose();
+                    }}
+                    className={cn(
+                      "w-full flex items-center gap-3.5 p-3.5 rounded-2xl transition-all duration-300 group relative overflow-hidden",
+                      isActive 
+                        ? "bg-primary/10 text-primary" 
+                        : "text-on-surface-variant/70 hover:bg-surface-container-low hover:text-on-surface"
+                    )}
+                  >
+                    {isActive && (
+                      <motion.div 
+                        layoutId="active-pill"
+                        className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-full"
+                      />
+                    )}
+                    <item.icon 
+                      size={18} 
+                      className={cn(
+                        "transition-colors",
+                        isActive ? "text-primary" : "group-hover:text-primary"
+                      )} 
+                    />
+                    <span className={cn(
+                      "font-body font-bold text-sm transition-colors",
+                      isActive ? "text-primary" : "group-hover:text-on-surface"
+                    )}>
+                      {item.label}
+                    </span>
+                  </button>
+                );
+              })}
             </nav>
 
-            <div className="pt-8 border-t border-outline-variant space-y-4">
-              <div className="flex items-center gap-3 p-2">
-                <div className="w-10 h-10 rounded-full overflow-hidden bg-surface-container-highest">
+            {/* Account Area */}
+            <div className="mt-auto pt-6 border-t border-outline-variant/10">
+              <div className="flex items-center gap-3 p-2 mb-4">
+                <div className="w-10 h-10 rounded-full overflow-hidden bg-surface-container-highest ring-2 ring-background shadow-sm shrink-0">
                   <img 
                     src={userAvatar} 
                     alt="Avatar" 
@@ -335,14 +368,24 @@ const Sidebar = ({ isOpen, onClose, onNavigate, userName, userAvatar }: { isOpen
                     referrerPolicy="no-referrer"
                   />
                 </div>
-                <div>
-                  <p className="font-bold text-sm">{userName}</p>
-                  <p className="text-[10px] text-on-surface-variant/60 font-medium">Alita Premium</p>
+                <div className="min-w-0">
+                  <p className="font-bold text-sm truncate">{userName}</p>
+                  <div className="flex items-center gap-1">
+                    <Sparkles size={10} className="text-secondary" />
+                    <p className="text-[10px] text-on-surface-variant/50 font-bold uppercase tracking-tighter">Alita Premium</p>
+                  </div>
                 </div>
               </div>
-              <button className="w-full flex items-center gap-3 p-4 text-error font-bold text-sm hover:bg-error-container/10 rounded-2xl transition-colors">
-                <LogOut size={18} />
-                退出登录
+              
+              <button 
+                onClick={() => {
+                  onLogout();
+                  onClose();
+                }}
+                className="w-full flex items-center gap-3 p-3.5 text-on-surface-variant/40 hover:text-error/80 font-bold text-xs rounded-2xl transition-all hover:bg-error/5 group"
+              >
+                <LogOut size={16} className="group-hover:text-error/60 transition-colors" />
+                <span>退出登录</span>
               </button>
             </div>
           </motion.div>
@@ -2375,6 +2418,35 @@ const SettingsRow = ({ icon: Icon, label, sub, onClick, iconColor, iconBg }: any
 
 // --- Modals ---
 
+const NumericKeypad = ({ onInput, onDelete, onDone, className }: { 
+  onInput: (val: string) => void, 
+  onDelete: () => void, 
+  onDone: () => void,
+  className?: string
+}) => {
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'delete'];
+  return (
+    <div className={cn("grid grid-cols-3 gap-2 p-4 bg-surface-container-low/20 rounded-[2.5rem]", className)}>
+      {keys.map((key) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => {
+            if (key === 'delete') onDelete();
+            else onInput(key);
+          }}
+          className={cn(
+            "h-12 rounded-2xl flex items-center justify-center text-xl font-bold transition-all active:scale-90",
+            key === 'delete' ? "text-on-surface-variant/40" : "text-on-surface hover:bg-surface-container-highest"
+          )}
+        >
+          {key === 'delete' ? <Delete size={20} /> : key}
+        </button>
+      ))}
+    </div>
+  );
+};
+
 const ManualEntryModal = ({ onClose, onSave, onUpdate, initialData, categories }: { 
   onClose: () => void, 
   onSave: (transaction: Omit<Transaction, 'id'>) => void,
@@ -2387,10 +2459,11 @@ const ManualEntryModal = ({ onClose, onSave, onUpdate, initialData, categories }
   const [selectedCategory, setSelectedCategory] = useState(initialData?.category || categories[0].id);
   const [note, setNote] = useState(initialData?.note || '');
   const [date, setDate] = useState<Date>(initialData?.date || new Date());
+  const [showKeypad, setShowKeypad] = useState(true);
   const dateInputRef = useRef<HTMLInputElement>(null);
 
   const handleSave = () => {
-    if (!amount || isNaN(Number(amount))) {
+    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
       return;
     }
     
@@ -2412,30 +2485,62 @@ const ManualEntryModal = ({ onClose, onSave, onUpdate, initialData, categories }
     onClose();
   };
 
+  const handleKeypadInput = (val: string) => {
+    if (val === '.') {
+      if (amount.includes('.')) return;
+      if (amount === '') {
+        setAmount('0.');
+        return;
+      }
+    }
+    if (amount === '0' && val !== '.') {
+      setAmount(val);
+    } else {
+      // Limit to 2 decimal places
+      if (amount.includes('.') && amount.split('.')[1].length >= 2) return;
+      // Limit total length
+      if (amount.length >= 10) return;
+      setAmount(prev => prev + val);
+    }
+  };
+
+  const handleKeypadDelete = () => {
+    setAmount(prev => prev.slice(0, -1));
+  };
+
   return (
     <motion.div 
       initial={{ y: '100%' }}
       animate={{ y: 0 }}
       exit={{ y: '100%' }}
-      transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+      transition={{ type: 'spring', damping: 30, stiffness: 250 }}
       className="absolute inset-0 z-[100] bg-background flex flex-col"
     >
-      <header className="flex items-center justify-between px-6 h-20">
-        <button onClick={onClose} className="text-primary">
-          <X size={24} />
+      <header className="flex items-center justify-between px-6 h-14 shrink-0">
+        <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full bg-surface-container-low text-on-surface-variant active:scale-90 transition-transform">
+          <X size={18} />
         </button>
-        <h1 className="font-headline font-bold text-xl">记一笔</h1>
-        <div className="w-6" />
+        <h1 className="font-headline font-bold text-base text-on-surface/80">记一笔</h1>
+        <div className="w-9" />
       </header>
 
-      <main className="flex-1 px-6 overflow-y-auto pb-12">
-        <div className="flex justify-center mb-10">
-          <div className="bg-surface-container-low p-1.5 rounded-full flex w-full max-w-[280px]">
+      <main className="flex-1 px-6 overflow-y-auto no-scrollbar flex flex-col">
+        {/* Type Switcher - iOS Segmented Control Style */}
+        <div className="flex justify-center mt-1 mb-6">
+          <div className="bg-surface-container-low p-1 rounded-2xl flex w-full max-w-[220px] relative">
+            <motion.div 
+              layoutId="type-active-bg"
+              className="absolute inset-1 bg-white rounded-xl shadow-sm z-0"
+              initial={false}
+              animate={{ x: type === 'expense' ? 0 : '100%' }}
+              transition={{ type: 'spring', bounce: 0.1, duration: 0.4 }}
+              style={{ width: 'calc(50% - 4px)' }}
+            />
             <button 
               onClick={() => setType('expense')}
               className={cn(
-                "flex-1 py-3 px-6 rounded-full text-sm font-bold transition-all",
-                type === 'expense' ? "bg-surface-container-highest shadow-sm" : "text-on-surface-variant"
+                "flex-1 py-2 rounded-xl text-xs font-bold transition-colors relative z-10",
+                type === 'expense' ? "text-primary" : "text-on-surface-variant/40"
               )}
             >
               支出
@@ -2443,8 +2548,8 @@ const ManualEntryModal = ({ onClose, onSave, onUpdate, initialData, categories }
             <button 
               onClick={() => setType('income')}
               className={cn(
-                "flex-1 py-3 px-6 rounded-full text-sm font-bold transition-all",
-                type === 'income' ? "bg-surface-container-highest shadow-sm" : "text-on-surface-variant"
+                "flex-1 py-2 rounded-xl text-xs font-bold transition-colors relative z-10",
+                type === 'income' ? "text-primary" : "text-on-surface-variant/40"
               )}
             >
               收入
@@ -2452,57 +2557,79 @@ const ManualEntryModal = ({ onClose, onSave, onUpdate, initialData, categories }
           </div>
         </div>
 
-        <section className="text-center mb-12">
-          <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-4">金额</label>
-          <div className="flex items-baseline justify-center gap-1">
-            <span className="text-4xl font-headline font-medium text-primary">¥</span>
-            <input 
-              autoFocus
-              type="number" 
-              inputMode="decimal"
-              placeholder="0.00" 
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="w-full text-center bg-transparent border-none focus:ring-0 p-0 text-7xl font-headline font-extrabold tracking-tighter focus:placeholder:opacity-0"
-            />
+        {/* Amount Input Section - Absolute Center Focus */}
+        <section className="text-center mb-8 space-y-1">
+          <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-on-surface-variant/20">输入金额</p>
+          <div 
+            onClick={() => setShowKeypad(true)}
+            className="flex items-center justify-center cursor-pointer active:scale-95 transition-transform py-2"
+          >
+            <span className={cn(
+              "text-6xl font-headline font-black tracking-tighter transition-colors",
+              amount ? "text-on-surface" : "text-on-surface-variant/30"
+            )}>
+              ¥{amount || '0.00'}
+            </span>
+            {showKeypad && (
+              <motion.div 
+                animate={{ opacity: [0, 1, 0] }}
+                transition={{ repeat: Infinity, duration: 1 }}
+                className="w-0.5 h-12 bg-primary ml-0.5 rounded-full"
+              />
+            )}
           </div>
         </section>
 
-        <section className="space-y-10">
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-6">选择分类</label>
-            <div className="grid grid-cols-4 gap-x-4 gap-y-6 max-h-[320px] overflow-y-auto pr-2 custom-scrollbar">
-              {categories.map((cat) => (
-                <div key={cat.id} className="flex flex-col items-center gap-3">
-                  <button 
-                    onClick={() => setSelectedCategory(cat.id)}
-                    className={cn(
-                      "w-16 h-16 rounded-2xl flex items-center justify-center transition-all active:scale-90", 
-                      selectedCategory === cat.id 
-                        ? "bg-primary text-white ring-4 ring-primary/20 ring-offset-2" 
-                        : cn(cat.color, "hover:bg-surface-container-highest")
-                    )}
-                  >
-                    <CategoryIcon 
-                      icon={cat.icon as any} 
-                      size={24} 
-                      className={selectedCategory === cat.id ? "text-white" : "text-on-surface-variant"} 
-                    />
-                  </button>
-                  <span className={cn(
-                    "text-[10px] font-bold uppercase tracking-widest transition-colors text-center leading-tight",
-                    selectedCategory === cat.id ? "text-primary" : "text-on-surface-variant"
-                  )}>
-                    {cat.name}
-                  </span>
-                </div>
-              ))}
-            </div>
+        {/* Categories Grid - Refined and Compact */}
+        <section className="mb-8">
+          <div className="flex items-center justify-between mb-4 px-1">
+            <h3 className="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant/20">选择分类</h3>
           </div>
+          <div className="grid grid-cols-4 gap-x-3 gap-y-4 max-h-[240px] overflow-y-auto pr-1 custom-scrollbar pb-1">
+            {categories.map((cat) => (
+              <div key={cat.id} className="flex flex-col items-center gap-2">
+                <button 
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={cn(
+                    "w-12 h-12 rounded-2xl flex items-center justify-center transition-all active:scale-90 relative", 
+                    selectedCategory === cat.id 
+                      ? "bg-primary/5 text-primary ring-1 ring-primary/10" 
+                      : cn(cat.color, "hover:bg-surface-container-highest")
+                  )}
+                >
+                  <CategoryIcon 
+                    icon={cat.icon as any} 
+                    size={20} 
+                    className={selectedCategory === cat.id ? "text-primary" : "text-on-surface-variant/80"} 
+                  />
+                  {selectedCategory === cat.id && (
+                    <motion.div 
+                      layoutId="cat-active-dot"
+                      className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-white rounded-full flex items-center justify-center shadow-sm z-20"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                    >
+                      <Check size={10} strokeWidth={4.5} />
+                    </motion.div>
+                  )}
+                </button>
+                <span className={cn(
+                  "text-[9px] font-bold tracking-tight transition-colors text-center leading-tight",
+                  selectedCategory === cat.id ? "text-primary" : "text-on-surface-variant/40"
+                )}>
+                  {cat.name}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
 
-          <div className="space-y-8 bg-surface-container-low/50 p-8 rounded-3xl">
+        {/* Unified Info Module - Date & Note */}
+        <section className="space-y-3 mb-6">
+          <div className="bg-surface-container-low/20 rounded-[2rem] overflow-hidden border border-outline-variant/5">
             <div 
               onClick={() => {
+                setShowKeypad(false);
                 if (dateInputRef.current) {
                   if ('showPicker' in dateInputRef.current) {
                     (dateInputRef.current as any).showPicker();
@@ -2511,46 +2638,83 @@ const ManualEntryModal = ({ onClose, onSave, onUpdate, initialData, categories }
                   }
                 }
               }}
-              className="flex items-center gap-3 border-b-2 border-primary-fixed py-2 cursor-pointer group"
+              className="flex items-center gap-3 px-5 py-3.5 cursor-pointer hover:bg-surface-container-low/40 transition-colors group"
             >
-              <ReceiptText size={20} className="text-primary group-hover:scale-110 transition-transform" />
-              <div className="flex-1">
-                <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">交易日期</p>
-                <p className="text-lg font-medium">{formatDate(date, true)}</p>
+              <div className="w-9 h-9 rounded-xl bg-primary/[0.03] text-primary/60 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <ReceiptText size={16} />
               </div>
-                <input 
-                  ref={dateInputRef}
-                  type="datetime-local" 
-                  className="absolute opacity-0 pointer-events-none" 
-                  value={toDateTimeLocal(date)}
-                  onChange={(e) => {
-                    const newDate = new Date(e.target.value);
-                    if (!isNaN(newDate.getTime())) {
-                      setDate(newDate);
-                    }
-                  }}
-                />
-            </div>
-            <div className="flex items-center gap-3 border-b-2 border-primary-fixed py-2">
-              <Mic size={20} className="text-primary" />
+              <div className="flex-1">
+                <p className="text-[8px] font-bold text-on-surface-variant/25 uppercase tracking-widest mb-0.5">交易日期</p>
+                <p className="text-xs font-bold text-on-surface/80">{formatDate(date, true)}</p>
+              </div>
+              <ChevronRight size={14} className="text-outline-variant/40" />
               <input 
-                type="text" 
-                placeholder="添加备注描述..." 
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                className="w-full bg-transparent border-none focus:ring-0 p-0 text-lg font-medium" 
+                ref={dateInputRef}
+                type="datetime-local" 
+                className="absolute opacity-0 pointer-events-none" 
+                value={toDateTimeLocal(date)}
+                onChange={(e) => {
+                  const newDate = new Date(e.target.value);
+                  if (!isNaN(newDate.getTime())) {
+                    setDate(newDate);
+                  }
+                }}
               />
+            </div>
+            
+            <div className="mx-5 h-px bg-outline-variant/5" />
+
+            <div className="flex items-center gap-3 px-5 py-3.5 group">
+              <div className="w-9 h-9 rounded-xl bg-secondary/[0.03] text-secondary/60 flex items-center justify-center group-focus-within:scale-105 transition-transform">
+                <Edit2 size={16} />
+              </div>
+              <div className="flex-1">
+                <p className="text-[8px] font-bold text-on-surface-variant/25 uppercase tracking-widest mb-0.5">备注描述</p>
+                <input 
+                  type="text" 
+                  placeholder="备注 (可选)" 
+                  value={note}
+                  onFocus={() => setShowKeypad(false)}
+                  onChange={(e) => setNote(e.target.value)}
+                  className="w-full bg-transparent border-none focus:ring-0 p-0 text-xs font-bold text-on-surface/80 placeholder:text-on-surface-variant/20" 
+                />
+              </div>
             </div>
           </div>
         </section>
 
-        <button 
-          onClick={handleSave}
-          className="w-full h-20 bg-secondary text-white rounded-full flex items-center justify-center gap-3 shadow-lg shadow-secondary/20 mt-12 active:scale-95 transition-transform"
-        >
-          <span className="font-headline font-bold text-lg">保存记录</span>
-          <CheckCircle2 size={24} fill="currentColor" />
-        </button>
+        {/* Numeric Keypad & Save Button */}
+        <div className="mt-auto pb-6 space-y-4">
+          <AnimatePresence>
+            {showKeypad && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              >
+                <NumericKeypad 
+                  onInput={handleKeypadInput}
+                  onDelete={handleKeypadDelete}
+                  onDone={() => setShowKeypad(false)}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <button 
+            onClick={handleSave}
+            disabled={!amount || Number(amount) <= 0}
+            className={cn(
+              "w-full py-4.5 rounded-[1.8rem] flex items-center justify-center gap-2 transition-all duration-300",
+              (!amount || Number(amount) <= 0)
+                ? "bg-surface-container-low text-on-surface-variant/20 cursor-not-allowed"
+                : "bg-primary text-white shadow-lg shadow-primary/20 active:scale-95"
+            )}
+          >
+            <span className="font-headline font-black text-sm tracking-widest">保存</span>
+          </button>
+        </div>
       </main>
     </motion.div>
   );
@@ -2568,12 +2732,16 @@ const VoiceModal = ({ onClose, onSave, categories, uid }: { onClose: () => void,
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
 
+  const status = isIdentifying ? 'identifying' : isRecording ? 'recording' : detectedData ? 'completed' : 'idle';
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       setPermissionStatus('granted');
       setError(null);
+      setDetectedData(null);
+      setTranscript('');
       
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
@@ -2613,7 +2781,6 @@ const VoiceModal = ({ onClose, onSave, categories, uid }: { onClose: () => void,
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      setIsIdentifying(true);
     }
   };
 
@@ -2621,7 +2788,6 @@ const VoiceModal = ({ onClose, onSave, categories, uid }: { onClose: () => void,
     setIsIdentifying(true);
     setError(null);
     try {
-      // 1. Upload audio to /api/transcribe
       const formData = new FormData();
       formData.append("audio", audioBlob, "recording.wav");
 
@@ -2641,7 +2807,6 @@ const VoiceModal = ({ onClose, onSave, categories, uid }: { onClose: () => void,
 
       setTranscript(transcriptText);
 
-      // 2. Send transcript to /api/parse-bill
       const parseResponse = await fetch("/api/parse-bill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2693,131 +2858,199 @@ const VoiceModal = ({ onClose, onSave, categories, uid }: { onClose: () => void,
     }
   };
 
-  const categoryName = categories.find(c => c.id === detectedData?.category)?.name || '其他';
+  const category = categories.find(c => c.id === detectedData?.category) || categories.find(c => c.id === 'other') || categories[0];
 
   return (
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="absolute inset-0 z-[110] bg-background flex flex-col items-center p-6"
+      className="absolute inset-0 z-[110] bg-background flex flex-col items-center"
     >
-      <header className="w-full flex items-center justify-between mb-12">
-        <button onClick={onClose} className="text-primary">
-          <X size={24} />
+      <header className="w-full flex items-center justify-between px-6 h-16 shrink-0">
+        <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container-low text-on-surface-variant active:scale-90 transition-transform">
+          <X size={20} />
         </button>
-        <h1 className="font-headline font-bold text-xl">语音记账</h1>
-        <div className="w-6" />
+        <h1 className="font-headline font-bold text-lg">语音记账</h1>
+        <div className="w-10" />
       </header>
 
-      <div className="text-center space-y-4 mb-16">
-        <div className="opacity-40 scale-75">
-          <JijiLogo size="text-xs" />
-          <span className="text-xs font-bold uppercase tracking-widest ml-2">· JIJI</span>
+      <main className="flex-1 w-full px-6 flex flex-col items-center overflow-y-auto no-scrollbar pt-4">
+        {/* Hamster Feedback Area */}
+        <div className="relative mb-8 flex flex-col items-center">
+          <motion.div
+            animate={
+              status === 'recording' ? { scale: [1, 1.05, 1] } :
+              status === 'identifying' ? { y: [0, -10, 0], rotate: [0, 5, -5, 0] } :
+              status === 'completed' ? { scale: [1, 1.1, 1], y: [0, -5, 0] } :
+              {}
+            }
+            transition={{ repeat: Infinity, duration: status === 'recording' ? 2 : 3, ease: "easeInOut" }}
+            className="relative z-10"
+          >
+            <JijiLogo size="h-32 w-32" />
+          </motion.div>
+          
+          {/* Status Text */}
+          <div className="mt-4 text-center">
+            <h2 className={cn(
+              "text-2xl font-headline font-bold transition-colors",
+              status === 'completed' ? "text-primary" : "text-on-surface"
+            )}>
+              {status === 'recording' && '正在聆听...'}
+              {status === 'identifying' && '正在识别...'}
+              {status === 'completed' && '识别完成'}
+              {status === 'idle' && '请开始说话'}
+            </h2>
+            <p className="text-xs font-bold text-on-surface-variant/40 mt-1 tracking-wide">
+              {status === 'recording' && '说一句，我来帮你记'}
+              {status === 'identifying' && '正在提取金额与分类'}
+              {status === 'completed' && '我已经帮你整理好了，确认一下即可入账'}
+              {status === 'idle' && '点击下方按钮开始录音'}
+            </p>
+          </div>
         </div>
-        <h2 className="text-3xl font-headline font-bold text-primary">
-          {isIdentifying ? '正在识别中...' : isRecording ? '正在倾听描述...' : '录音已结束'}
-        </h2>
-      </div>
 
-      <div className="relative mb-16">
-        <AnimatePresence>
-          {isRecording && (
+        {/* Microphone / Action Button */}
+        <div className="relative mb-10">
+          <AnimatePresence>
+            {status === 'recording' && (
+              <motion.div 
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: [1, 1.5, 1], opacity: [0.1, 0.4, 0.1] }}
+                exit={{ opacity: 0 }}
+                transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+                className="absolute inset-0 bg-primary rounded-full blur-2xl"
+              />
+            )}
+          </AnimatePresence>
+          
+          <button 
+            onClick={status === 'recording' ? stopRecording : status === 'completed' ? startRecording : undefined}
+            disabled={status === 'identifying'}
+            className={cn(
+              "relative w-24 h-24 rounded-full shadow-2xl flex items-center justify-center transition-all duration-500 active:scale-95",
+              status === 'recording' ? "bg-primary text-white scale-110" : 
+              status === 'completed' ? "bg-surface-container-highest text-primary" :
+              "bg-surface-container-highest text-on-surface-variant/20"
+            )}
+          >
+            {status === 'recording' ? (
+              <div className="w-8 h-8 bg-white rounded-sm animate-pulse" />
+            ) : status === 'completed' ? (
+              <LucideIcons.RotateCcw size={32} />
+            ) : status === 'identifying' ? (
+              <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+            ) : (
+              <Mic size={32} />
+            )}
+          </button>
+        </div>
+
+        {/* Transcript & Result Area */}
+        <div className="w-full max-w-sm space-y-6 pb-32">
+          {/* Transcript */}
+          <div className="text-center px-4">
+            <p className="text-lg font-medium leading-relaxed text-on-surface/80">
+              {transcript ? (
+                <span className="italic">“{transcript}”</span>
+              ) : status === 'recording' ? (
+                <span className="opacity-20 italic">“刚刚在全家买了一瓶水，3.5元”</span>
+              ) : null}
+            </p>
+          </div>
+
+          {/* Result Card */}
+          <AnimatePresence>
+            {status === 'completed' && detectedData && (
+              <motion.div 
+                initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                className="bg-surface-container-low/40 rounded-[2.5rem] border border-outline-variant/5 overflow-hidden shadow-sm"
+              >
+                <div className="p-6 space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center", category.color)}>
+                        <CategoryIcon icon={category.icon as any} size={20} className="text-on-surface" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-widest">分类</p>
+                        <p className="text-sm font-bold text-on-surface">{category.name}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-widest">类型</p>
+                      <p className={cn("text-sm font-bold", detectedData.type === 'income' ? "text-secondary" : "text-primary")}>
+                        {detectedData.type === 'income' ? '收入' : '支出'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-outline-variant/5">
+                    <div>
+                      <p className="text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-widest">金额</p>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-sm font-bold text-primary">¥</span>
+                        <span className="text-3xl font-headline font-black tracking-tighter text-on-surface">
+                          {detectedData.amount?.toFixed(2) || '0.00'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-widest">时间</p>
+                      <p className="text-sm font-bold text-on-surface">今天</p>
+                    </div>
+                  </div>
+
+                  {detectedData.note && (
+                    <div className="pt-4 border-t border-outline-variant/5">
+                      <p className="text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-widest mb-1">备注</p>
+                      <p className="text-xs font-bold text-on-surface/60 leading-relaxed">{detectedData.note}</p>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {error && (
             <motion.div 
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: [1, 1.4, 1], opacity: [0.1, 0.3, 0.1] }}
-              exit={{ opacity: 0 }}
-              transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
-              className="absolute inset-0 bg-primary/20 rounded-full blur-3xl"
-            />
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="p-4 bg-error/5 border border-error/10 rounded-2xl text-center"
+            >
+              <p className="text-xs font-bold text-error">{error}</p>
+            </motion.div>
           )}
-        </AnimatePresence>
+        </div>
+      </main>
+
+      {/* Bottom Actions */}
+      <div className="px-6 pb-10 pt-2 flex flex-col gap-4 shrink-0 bg-background border-t border-outline-variant/5">
+        {status === 'completed' ? (
+          <button 
+            onClick={handleSave} 
+            className="w-full h-18 bg-primary text-white rounded-[2rem] flex items-center justify-center gap-3 shadow-xl shadow-primary/20 active:scale-95 transition-transform"
+          >
+            <span className="font-headline font-black text-base tracking-widest">确认入账</span>
+            <CheckCircle2 size={20} />
+          </button>
+        ) : status === 'identifying' ? (
+          <button 
+            disabled
+            className="w-full h-18 bg-surface-container-highest text-on-surface-variant/40 rounded-[2rem] flex items-center justify-center gap-3"
+          >
+            <span className="font-headline font-black text-base tracking-widest">正在智能分析...</span>
+          </button>
+        ) : null}
         
         <button 
-          onClick={isRecording ? stopRecording : startRecording}
-          className={cn(
-            "relative w-28 h-28 rounded-full shadow-2xl flex items-center justify-center transition-all duration-500",
-            isRecording ? "bg-primary text-white scale-110" : "bg-surface-container-highest text-on-surface-variant"
-          )}
+          onClick={onClose} 
+          className="w-full py-2 text-on-surface-variant/60 font-bold text-sm active:opacity-60 transition-opacity"
         >
-          {isRecording ? (
-            <motion.div
-              animate={{ scale: [1, 1.1, 1] }}
-              transition={{ repeat: Infinity, duration: 1.5 }}
-            >
-              <Mic size={44} />
-            </motion.div>
-          ) : (
-            <Mic size={44} />
-          )}
+          取消
         </button>
-      </div>
-
-      <div className="text-center space-y-8 w-full max-w-sm">
-        <div className="min-h-[80px] flex items-center justify-center px-4">
-          <p className="text-xl font-medium leading-relaxed text-on-surface">
-            {transcript ? (
-              <span>“{transcript}”</span>
-            ) : (
-              <span className="opacity-30 italic">“刚刚在全家买了一瓶水，3.5元”</span>
-            )}
-          </p>
-        </div>
-
-        {(isIdentifying || detectedData) && (
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-6 bg-secondary-container/10 rounded-[2.5rem] border border-secondary-container/20 shadow-sm"
-          >
-            <div className="flex items-center justify-center gap-3 text-secondary font-bold text-sm mb-3">
-              <Sparkles size={18} className={isIdentifying ? "animate-pulse" : ""} />
-              {isIdentifying ? '正在智能分析...' : '智能识别成功'}
-            </div>
-            
-            {detectedData ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-center gap-1">
-                  <span className="text-xl font-bold text-primary">¥</span>
-                  <input 
-                    type="number"
-                    value={detectedData.amount}
-                    onChange={(e) => setDetectedData({ ...detectedData, amount: Number(e.target.value) })}
-                    className="w-32 text-center bg-transparent border-none focus:ring-0 p-0 text-3xl font-headline font-extrabold text-primary"
-                  />
-                </div>
-                <div className="flex items-center justify-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-                    <CategoryIcon icon={categories.find(c => c.id === detectedData.category)?.icon || 'HelpCircle'} size={14} className="text-primary" />
-                  </div>
-                  <p className="font-bold text-sm">检测到分类：{categoryName}</p>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-center gap-2">
-                <div className="w-2 h-2 bg-secondary rounded-full animate-bounce [animation-delay:-0.3s]" />
-                <div className="w-2 h-2 bg-secondary rounded-full animate-bounce [animation-delay:-0.15s]" />
-                <div className="w-2 h-2 bg-secondary rounded-full animate-bounce" />
-              </div>
-            )}
-          </motion.div>
-        )}
-      </div>
-
-      {error && (
-        <p className="mt-4 text-xs font-bold text-tertiary bg-tertiary/10 px-4 py-2 rounded-full">{error}</p>
-      )}
-
-      <div className="absolute bottom-12 w-full px-6 space-y-6">
-        <button 
-          onClick={handleSave} 
-          disabled={!detectedData}
-          className="w-full h-20 bg-secondary text-white rounded-full flex items-center justify-center gap-3 shadow-lg shadow-secondary/20 active:scale-95 transition-transform disabled:opacity-50 disabled:scale-100"
-        >
-          <span className="font-headline font-bold text-lg">确认入账</span>
-          <CheckCircle2 size={24} fill="currentColor" />
-        </button>
-        <button onClick={onClose} className="w-full text-on-surface-variant font-bold">取消</button>
       </div>
     </motion.div>
   );
@@ -2837,6 +3070,8 @@ const ScreenshotModal = ({ onClose, onSave, categories }: { onClose: () => void,
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
+
+  const status = isScanning ? 'identifying' : previewUrl ? 'completed' : 'idle';
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2870,7 +3105,6 @@ const ScreenshotModal = ({ onClose, onSave, categories }: { onClose: () => void,
       setAmount(receiptData.amount?.toString() || '');
       setType(receiptData.type || 'expense');
       
-      // Fallback to 'other' if category is not recognized or not in our list
       const recognizedCat = categories.find(c => c.id === receiptData.category);
       setSelectedCategory(recognizedCat ? recognizedCat.id : 'other');
       
@@ -2912,32 +3146,24 @@ const ScreenshotModal = ({ onClose, onSave, categories }: { onClose: () => void,
     onClose();
   };
 
-  const items = [
-    { icon: Home, label: '商户名称', value: title || (isScanning ? '正在识别...' : '等待上传'), onChange: (v: string) => setTitle(v) },
-    { icon: LayoutGrid, label: '支出类别', value: categories.find(c => c.id === selectedCategory)?.name || '未分类', onClick: () => setShowCategoryPicker(true), categoryIcon: categories.find(c => c.id === selectedCategory)?.icon },
-    { icon: ReceiptText, label: '交易日期', value: formatDate(date, true), isDate: true },
-    { icon: Wallet, label: '交易类型', value: type === 'income' ? '收入' : '支出', isType: true },
-  ];
+  const category = categories.find(c => c.id === selectedCategory) || categories[0];
 
   return (
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="absolute inset-0 z-[110] bg-background flex flex-col p-6 overflow-y-auto no-scrollbar"
+      className="absolute inset-0 z-[110] bg-background flex flex-col overflow-hidden"
     >
-      <header className="flex items-center justify-between mb-8">
-        <button onClick={onClose} className="text-primary">
-          <X size={24} />
+      <header className="flex items-center justify-between px-6 h-16 shrink-0">
+        <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container-low text-on-surface-variant active:scale-90 transition-transform">
+          <X size={20} />
         </button>
-        <h1 className="font-headline font-bold text-xl">截图识别</h1>
-        <div className="w-6" />
+        <h1 className="font-headline font-bold text-lg">截图识别</h1>
+        <div className="w-10" />
       </header>
 
-      <div 
-        onClick={() => previewUrl ? setShowFullPreview(true) : fileInputRef.current?.click()}
-        className="relative aspect-[3/4] w-full max-w-sm mx-auto rounded-[3rem] overflow-hidden mb-8 shadow-2xl cursor-pointer group"
-      >
+      <main className="flex-1 w-full px-6 overflow-y-auto no-scrollbar pb-6">
         <input 
           type="file" 
           ref={fileInputRef} 
@@ -2945,138 +3171,244 @@ const ScreenshotModal = ({ onClose, onSave, categories }: { onClose: () => void,
           accept="image/*" 
           onChange={handleFileChange} 
         />
-        
-        {previewUrl ? (
-          <img 
-            src={previewUrl} 
-            alt="Preview" 
-            className={cn("w-full h-full object-cover transition-opacity", isScanning ? "opacity-50" : "opacity-100")}
-            referrerPolicy="no-referrer"
-          />
-        ) : (
-          <div className="absolute inset-0 bg-zinc-100 flex flex-col items-center justify-center gap-4">
-            <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">
-              <ImageIcon size={40} className="text-primary" />
-            </div>
-            <span className="font-bold text-sm text-on-surface-variant">点击上传截图</span>
-          </div>
-        )}
 
-        {isScanning && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/20 backdrop-blur-sm">
-            <motion.div 
-              animate={{ y: [0, 200, 0] }}
-              transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-              className="absolute top-0 left-0 right-0 h-1 bg-primary shadow-[0_0_15px_rgba(var(--primary),0.5)] z-20"
-            />
-            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-            <span className="font-bold text-white drop-shadow-md">正在智能识别...</span>
-          </div>
-        )}
-        
-        {!isScanning && previewUrl && (
-          <div className="absolute bottom-6 right-6 bg-secondary text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg">
-            {error ? '识别失败' : '点击预览'}
-          </div>
-        )}
-      </div>
-
-      <div className="text-center space-y-2 mb-8">
-        <p className="text-xs font-bold uppercase tracking-widest text-on-surface-variant/60">支出金额</p>
-        <div className="flex items-baseline justify-center gap-1">
-          <span className="text-2xl font-bold text-primary">¥</span>
-          <input 
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0.00"
-            className="w-40 text-center bg-transparent border-none focus:ring-0 p-0 text-6xl font-headline font-extrabold tracking-tighter focus:placeholder:opacity-0"
-          />
-        </div>
-      </div>
-
-      <div className="bg-surface-container-low rounded-3xl p-6 space-y-6">
-        {items.map((item, i) => (
+        {/* Upload / Preview Area */}
+        <div className={cn(
+          "transition-all duration-500 ease-in-out",
+          status === 'idle' ? "mt-12 mb-12" : "mt-4 mb-8"
+        )}>
           <div 
-            key={i} 
-            className="flex items-center justify-between group"
-            onClick={item.onClick}
+            onClick={() => status === 'idle' ? fileInputRef.current?.click() : setShowFullPreview(true)}
+            className={cn(
+              "relative mx-auto rounded-[2.5rem] overflow-hidden shadow-2xl transition-all duration-500 cursor-pointer group",
+              status === 'idle' ? "aspect-[3/4] w-full max-w-[280px] bg-surface-container-highest border-2 border-dashed border-outline-variant/20" : "aspect-[16/9] w-full max-w-[320px] bg-black"
+            )}
           >
-            <div className="flex items-center gap-4 flex-1">
-              <div className="w-12 h-12 rounded-full bg-secondary-container/20 flex items-center justify-center text-secondary shrink-0">
-                {item.categoryIcon ? (
-                  <CategoryIcon icon={item.categoryIcon} size={24} />
-                ) : (
-                  <item.icon size={24} />
+            {previewUrl ? (
+              <img 
+                src={previewUrl} 
+                alt="Preview" 
+                className={cn(
+                  "w-full h-full object-cover transition-all duration-700", 
+                  status === 'identifying' ? "opacity-40 scale-110 blur-sm" : "opacity-100",
+                  status === 'completed' && "object-top"
                 )}
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 p-8 text-center">
+                <div className="w-20 h-20 bg-white rounded-[2rem] flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">
+                  <ImageIcon size={40} className="text-primary" />
+                </div>
+                <div>
+                  <p className="font-headline font-black text-lg text-on-surface tracking-tight">上传支付截图</p>
+                  <p className="text-xs text-on-surface-variant/60 mt-2 leading-relaxed">
+                    支持微信、支付宝、银行账单<br />
+                    智能提取金额、商户与日期
+                  </p>
+                </div>
               </div>
-              <div className="flex-1">
-                <p className="text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-widest">{item.label}</p>
-                {item.onChange ? (
-                  <input 
-                    type="text"
-                    value={item.value}
-                    onChange={(e) => item.onChange(e.target.value)}
-                    className="w-full bg-transparent border-none focus:ring-0 p-0 font-bold"
-                  />
-                ) : (
-                  <p className="font-bold">{item.value}</p>
-                )}
+            )}
+
+            {status === 'identifying' && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+                <motion.div 
+                  animate={{ y: [0, 320, 0] }}
+                  transition={{ repeat: Infinity, duration: 2.5, ease: "linear" }}
+                  className="absolute top-0 left-0 right-0 h-1 bg-primary shadow-[0_0_20px_rgba(var(--primary),0.8)] z-20"
+                />
+                <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin" />
+                <span className="font-bold text-white text-xs tracking-widest drop-shadow-md">正在智能识别...</span>
               </div>
-            </div>
-            <div className="relative flex items-center gap-2">
-              {item.isDate && (
-                <div onClick={openDatePicker} className="cursor-pointer hover:text-primary transition-colors">
-                  <ChevronRight size={20} className="text-outline-variant" />
+            )}
+
+            {status === 'completed' && (
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end justify-center pb-4">
+                <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md text-white px-4 py-1.5 rounded-full text-[10px] font-bold border border-white/10">
+                  <Search size={12} />
+                  点击查看原图
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Amount Section */}
+        <AnimatePresence>
+          {status === 'completed' && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center space-y-2 mb-10"
+            >
+              <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/40">
+                {type === 'expense' ? '识别支出金额' : '识别收入金额'}
+              </p>
+              <div className="flex items-center justify-center">
+                <div className="relative inline-flex items-baseline">
+                  <span className="text-3xl font-headline font-black text-primary mr-1">¥</span>
                   <input 
-                    ref={dateInputRef}
-                    type="datetime-local" 
-                    className="absolute opacity-0 pointer-events-none right-0" 
-                    value={toDateTimeLocal(date)}
-                    onChange={(e) => {
-                      const newDate = new Date(e.target.value);
-                      if (!isNaN(newDate.getTime())) {
-                        setDate(newDate);
-                      }
-                    }}
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="w-auto min-w-[120px] max-w-[240px] text-center bg-transparent border-none focus:ring-0 p-0 text-7xl font-headline font-black tracking-tighter text-on-surface"
+                    style={{ width: `${Math.max(amount.length || 4, 4) * 0.6}em` }}
                   />
                 </div>
+              </div>
+              <p className="text-[10px] font-medium text-on-surface-variant/60 flex items-center justify-center gap-1.5">
+                <CheckCircle2 size={10} className="text-primary" />
+                已自动提取，若不准确可点击修改
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Result Card */}
+        <AnimatePresence>
+          {status === 'completed' && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-4"
+            >
+              <div className="bg-surface-container-low/40 rounded-[2.5rem] border border-outline-variant/5 overflow-hidden shadow-sm">
+                <div className="p-6 space-y-8">
+                  {/* Merchant */}
+                  <div className="flex flex-col gap-1">
+                    <p className="text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-widest">商户名称</p>
+                    <input 
+                      type="text"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="识别中..."
+                      className="w-full bg-transparent border-none focus:ring-0 p-0 font-headline font-black text-xl text-on-surface"
+                    />
+                  </div>
+
+                  {/* Category & Type */}
+                  <div className="grid grid-cols-2 gap-6 pt-6 border-t border-outline-variant/5">
+                    <div 
+                      onClick={() => setShowCategoryPicker(true)}
+                      className="flex flex-col gap-2 cursor-pointer group"
+                    >
+                      <p className="text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-widest">账单分类</p>
+                      <div className="flex items-center gap-3 bg-surface-container-highest/50 p-2 pr-4 rounded-2xl group-active:scale-95 transition-transform">
+                        <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center shadow-sm", category.color)}>
+                          <CategoryIcon icon={category.icon as any} size={18} className="text-on-surface" />
+                        </div>
+                        <span className="text-sm font-bold text-on-surface">{category.name}</span>
+                        <ChevronRight size={14} className="ml-auto text-outline-variant" />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <p className="text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-widest">交易类型</p>
+                      <div className="flex p-1 bg-surface-container-highest/50 rounded-2xl h-12">
+                        <button 
+                          onClick={() => setType('expense')}
+                          className={cn(
+                            "flex-1 rounded-xl text-[10px] font-black transition-all",
+                            type === 'expense' ? "bg-white text-primary shadow-sm" : "text-on-surface-variant/40"
+                          )}
+                        >
+                          支出
+                        </button>
+                        <button 
+                          onClick={() => setType('income')}
+                          className={cn(
+                            "flex-1 rounded-xl text-[10px] font-black transition-all",
+                            type === 'income' ? "bg-white text-secondary shadow-sm" : "text-on-surface-variant/40"
+                          )}
+                        >
+                          收入
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Date */}
+                  <div className="pt-6 border-t border-outline-variant/5">
+                    <div 
+                      onClick={openDatePicker}
+                      className="flex items-center justify-between cursor-pointer group"
+                    >
+                      <div className="flex flex-col gap-1">
+                        <p className="text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-widest">交易日期</p>
+                        <span className="text-sm font-bold text-on-surface">{formatDate(date, true)}</span>
+                      </div>
+                      <div className="w-10 h-10 rounded-full bg-surface-container-highest/50 flex items-center justify-center text-outline-variant group-active:scale-90 transition-transform">
+                        <ChevronRight size={18} />
+                      </div>
+                      <input 
+                        ref={dateInputRef}
+                        type="datetime-local" 
+                        className="absolute opacity-0 pointer-events-none" 
+                        value={toDateTimeLocal(date)}
+                        onChange={(e) => {
+                          const newDate = new Date(e.target.value);
+                          if (!isNaN(newDate.getTime())) setDate(newDate);
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {error && (
+                <div className="p-4 bg-error/5 border border-error/10 rounded-2xl text-center">
+                  <p className="text-xs font-bold text-error">{error}</p>
+                </div>
               )}
-              {item.isType && (
-                <button 
-                  onClick={() => setType(type === 'income' ? 'expense' : 'income')}
-                  className="text-primary font-bold text-sm hover:underline"
-                >
-                  切换
-                </button>
-              )}
-              {!item.isDate && !item.isType && !item.onChange && (
-                <ChevronRight size={20} className="text-outline-variant" />
-              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
+
+      {/* Bottom Actions */}
+      <div className="px-6 pb-10 pt-2 flex flex-col gap-4 shrink-0 bg-background border-t border-outline-variant/5">
+        {status === 'completed' ? (
+          <>
+            <button 
+              onClick={handleSave} 
+              className="w-full h-18 bg-primary text-white rounded-[2rem] flex items-center justify-center gap-3 shadow-xl shadow-primary/20 active:scale-95 transition-transform"
+            >
+              <span className="font-headline font-black text-base tracking-widest">确认入账</span>
+              <CheckCircle2 size={20} />
+            </button>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                className="flex-1 h-14 bg-surface-container-highest text-on-surface-variant rounded-2xl flex items-center justify-center gap-2 font-bold text-sm active:scale-95 transition-transform"
+              >
+                <RotateCcw size={16} />
+                重新上传
+              </button>
+              <button 
+                onClick={onClose}
+                className="flex-1 h-14 bg-surface-container-low text-on-surface-variant/60 rounded-2xl flex items-center justify-center font-bold text-sm active:scale-95 transition-transform"
+              >
+                取消
+              </button>
             </div>
-          </div>
-        ))}
-      </div>
-
-      {error && (
-        <p className="mt-4 text-center text-xs font-bold text-tertiary">{error}</p>
-      )}
-
-      <div className="mt-12 space-y-6 pb-12">
-        <button 
-          onClick={handleSave}
-          disabled={isScanning || !previewUrl}
-          className="w-full h-20 bg-secondary text-white rounded-full flex items-center justify-center gap-3 shadow-lg shadow-secondary/20 active:scale-95 transition-transform disabled:opacity-50 disabled:scale-100"
-        >
-          <span className="font-headline font-bold text-lg">确认入账</span>
-          <CheckCircle2 size={24} fill="currentColor" />
-        </button>
-        <button 
-          onClick={() => fileInputRef.current?.click()}
-          className="w-full text-on-surface-variant font-bold"
-        >
-          重新上传
-        </button>
+          </>
+        ) : status === 'identifying' ? (
+          <button 
+            disabled
+            className="w-full h-18 bg-surface-container-highest text-on-surface-variant/40 rounded-[2rem] flex items-center justify-center gap-3"
+          >
+            <span className="font-headline font-black text-base tracking-widest">正在智能分析...</span>
+          </button>
+        ) : (
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full h-18 bg-primary text-white rounded-[2rem] flex items-center justify-center gap-3 shadow-xl shadow-primary/20 active:scale-95 transition-transform"
+          >
+            <span className="font-headline font-black text-base tracking-widest">上传截图开始识别</span>
+            <Plus size={20} />
+          </button>
+        )}
       </div>
 
       {/* Full Image Preview Modal */}
@@ -3739,8 +4071,10 @@ function AppContent() {
           isOpen={isSidebarOpen} 
           onClose={() => setIsSidebarOpen(false)} 
           onNavigate={setActiveTab} 
+          activeTab={activeTab}
           userName={user.displayName || '叽叽'}
           userAvatar={user.photoURL || 'https://picsum.photos/seed/hamster_cute_user/200/200'}
+          onLogout={handleLogout}
         />
         
         <main 
