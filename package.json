@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google/genai": "^1.48.0",
     "@types/express": "^5.0.6",
     "@types/node": "^25.5.0",
     "axios": "^1.14.0",

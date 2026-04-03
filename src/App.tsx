@@ -106,6 +106,8 @@ import {
   Timestamp
 } from 'firebase/firestore';
 
+import { parseBillFromImage, parseBillFromText, ParsedBill } from './services/geminiService';
+
 // --- Components ---
 
 interface ErrorBoundaryProps {
@@ -165,6 +167,403 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     return this.props.children;
   }
 }
+
+const AutoCaptureScreen = ({ 
+  onSave, 
+  categories, 
+  onNavigateToSettings 
+}: { 
+  onSave: (t: Omit<Transaction, 'id'>) => void, 
+  categories: Category[],
+  onNavigateToSettings: () => void
+}) => {
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [pendingBill, setPendingBill] = useState<ParsedBill | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [sourceType, setSourceType] = useState<'screenshot' | 'share' | 'shortcut'>('screenshot');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleScreenshotUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64 = reader.result as string;
+      setPreviewUrl(base64);
+      setSourceType('screenshot');
+      setIsProcessing(true);
+      setError(null);
+      try {
+        const parsed = await parseBillFromImage(base64, file.type);
+        setPendingBill(parsed);
+      } catch (err: any) {
+        setError(err.message || "识别失败，请重试或手动输入");
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleConfirm = () => {
+    if (!pendingBill) return;
+    onSave({
+      title: pendingBill.title,
+      amount: pendingBill.amount,
+      type: pendingBill.type,
+      category: pendingBill.category,
+      date: new Date(pendingBill.date),
+      status: 'confirmed',
+      note: pendingBill.note,
+      source: {
+        type: sourceType,
+        imageUrl: previewUrl || undefined,
+        rawText: pendingBill.rawText,
+        parsedAt: new Date(),
+      }
+    });
+    setPendingBill(null);
+    setPreviewUrl(null);
+  };
+
+  return (
+    <div className="pt-28 pb-48 px-6 max-w-2xl mx-auto space-y-8">
+      <header className="space-y-2">
+        <h2 className="text-2xl font-headline font-bold text-on-surface">自动记账</h2>
+        <p className="text-sm text-on-surface-variant/60 font-medium">支付后顺手触发，AI 自动识别入账</p>
+      </header>
+
+      {/* Main Entry Cards */}
+      <div className="grid grid-cols-1 gap-4">
+        <motion.div 
+          whileTap={{ scale: 0.98 }}
+          onClick={() => fileInputRef.current?.click()}
+          className="bg-white p-6 rounded-[2.5rem] border border-outline-variant/10 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex items-center gap-5 cursor-pointer group"
+        >
+          <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all duration-500">
+            <LucideIcons.Image size={28} />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-on-surface">导入支付截图</h3>
+            <p className="text-xs text-on-surface-variant/60 mt-1">支持微信、支付宝、银行卡截图</p>
+          </div>
+          <LucideIcons.ChevronRight size={20} className="text-on-surface-variant/30" />
+        </motion.div>
+
+        <motion.div 
+          whileTap={{ scale: 0.98 }}
+          onClick={onNavigateToSettings}
+          className="bg-surface-container-low p-6 rounded-[2.5rem] border border-outline-variant/5 flex items-center gap-5 cursor-pointer group"
+        >
+          <div className="w-14 h-14 bg-secondary/10 rounded-2xl flex items-center justify-center text-secondary group-hover:bg-secondary group-hover:text-white transition-all duration-500">
+            <LucideIcons.Zap size={28} />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-on-surface">配置触发方式</h3>
+            <p className="text-xs text-on-surface-variant/60 mt-1">设置轻点背面、Siri 或快捷指令</p>
+          </div>
+          <LucideIcons.ChevronRight size={20} className="text-on-surface-variant/30" />
+        </motion.div>
+      </div>
+
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        className="hidden" 
+        accept="image/*" 
+        onChange={handleScreenshotUpload} 
+      />
+
+      {/* Processing State */}
+      <AnimatePresence>
+        {isProcessing && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="bg-white p-10 rounded-[3rem] border border-outline-variant/10 shadow-2xl flex flex-col items-center justify-center space-y-6"
+          >
+            <div className="relative">
+              <div className="w-20 h-20 border-4 border-primary/10 border-t-primary rounded-full animate-spin" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Sparkles className="text-primary animate-pulse" size={24} />
+              </div>
+            </div>
+            <div className="text-center space-y-2">
+              <h3 className="font-bold text-lg">正在智能识别...</h3>
+              <p className="text-xs text-on-surface-variant/60">AI 正在解析金额、商户和分类</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Pending Bill Card */}
+      <AnimatePresence>
+        {pendingBill && !isProcessing && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="bg-white rounded-[3rem] border border-outline-variant/10 shadow-2xl overflow-hidden"
+          >
+            <div className="p-6 bg-primary/5 border-b border-outline-variant/10 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
+                  <Sparkles size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">待确认账单</h3>
+                  <p className="text-[10px] text-on-surface-variant/60 font-bold uppercase tracking-widest">识别自支付截图</p>
+                </div>
+              </div>
+              <button onClick={() => setPendingBill(null)} className="text-on-surface-variant/40 hover:text-on-surface transition-colors">
+                <LucideIcons.X size={20} />
+              </button>
+            </div>
+
+            <div className="p-8 space-y-8">
+              <div className="text-center space-y-2">
+                <p className="text-xs font-bold text-on-surface-variant/40 uppercase tracking-widest">交易金额</p>
+                <div className="flex items-center justify-center gap-1">
+                  <span className="text-2xl font-bold text-on-surface-variant/40">¥</span>
+                  <input 
+                    type="number" 
+                    value={pendingBill.amount}
+                    onChange={(e) => setPendingBill({ ...pendingBill, amount: Number(e.target.value) })}
+                    className="text-5xl font-black text-on-surface bg-transparent border-none outline-none w-48 text-center"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                <div className="flex items-center justify-between p-4 bg-surface-container-low rounded-2xl">
+                  <span className="text-xs font-bold text-on-surface-variant/60">商户名称</span>
+                  <input 
+                    type="text" 
+                    value={pendingBill.title}
+                    onChange={(e) => setPendingBill({ ...pendingBill, title: e.target.value })}
+                    className="text-sm font-bold text-on-surface bg-transparent border-none outline-none text-right flex-1 ml-4"
+                  />
+                </div>
+                <div className="flex items-center justify-between p-4 bg-surface-container-low rounded-2xl">
+                  <span className="text-xs font-bold text-on-surface-variant/60">交易分类</span>
+                  <select 
+                    value={pendingBill.category}
+                    onChange={(e) => setPendingBill({ ...pendingBill, category: e.target.value })}
+                    className="text-sm font-bold text-primary bg-transparent border-none outline-none text-right appearance-none"
+                  >
+                    {categories.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center justify-between p-4 bg-surface-container-low rounded-2xl">
+                  <span className="text-xs font-bold text-on-surface-variant/60">交易时间</span>
+                  <input 
+                    type="datetime-local" 
+                    value={toDateTimeLocal(new Date(pendingBill.date))}
+                    onChange={(e) => setPendingBill({ ...pendingBill, date: new Date(e.target.value).toISOString() })}
+                    className="text-sm font-bold text-on-surface bg-transparent border-none outline-none text-right"
+                  />
+                </div>
+              </div>
+
+              {previewUrl && (
+                <div className="relative aspect-video rounded-2xl overflow-hidden border border-outline-variant/10">
+                  <img src={previewUrl} alt="Evidence" className="w-full h-full object-cover opacity-40 blur-[2px]" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <p className="text-[10px] font-bold text-on-surface-variant/60 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm">原始证据已关联</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => setPendingBill(null)}
+                  className="flex-1 py-4 bg-surface-container-highest text-on-surface font-bold rounded-full active:scale-95 transition-all"
+                >
+                  取消
+                </button>
+                <button 
+                  onClick={handleConfirm}
+                  className="flex-[2] py-4 bg-primary text-white font-bold rounded-full shadow-xl shadow-primary/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  <LucideIcons.Check size={20} />
+                  确认入账
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {error && (
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-4 bg-error/10 text-error text-xs font-bold rounded-2xl border border-error/20 flex items-center gap-3"
+        >
+          <AlertCircle size={16} />
+          {error}
+        </motion.div>
+      )}
+
+      {/* Instructions */}
+      <section className="space-y-4 pt-4">
+        <h3 className="text-xs font-bold text-on-surface-variant/40 uppercase tracking-widest px-2">如何使用自动记账</h3>
+        <div className="space-y-3">
+          <div className="bg-surface-container-low p-5 rounded-3xl flex items-start gap-4 border border-outline-variant/5">
+            <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-primary font-bold text-xs shrink-0 shadow-sm">1</div>
+            <p className="text-xs text-on-surface-variant/70 leading-relaxed">在支付完成后，您可以直接截图并导入，AI 会自动识别金额和商户。</p>
+          </div>
+          <div className="bg-surface-container-low p-5 rounded-3xl flex items-start gap-4 border border-outline-variant/5">
+            <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-primary font-bold text-xs shrink-0 shadow-sm">2</div>
+            <p className="text-xs text-on-surface-variant/70 leading-relaxed">配置“轻点背面”或“快捷指令”，只需轻触手机即可快速打开此页面。</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+};
+
+const AutoCaptureSettingsScreen = ({ onBack }: { onBack?: () => void }) => {
+  const settings = [
+    {
+      id: 'back-tap',
+      title: '轻点背面 (推荐)',
+      desc: '最适合 iPhone 的触发方式。支付完成后轻点手机背面两下，立即弹出记账确认。',
+      steps: ['设置 > 辅助功能 > 触控 > 轻点背面', '选择“轻点两下” > 绑定“自动记账”快捷指令'],
+      recommended: true,
+      icon: LucideIcons.Smartphone
+    },
+    {
+      id: 'assistive-touch',
+      title: '辅助触控 (小白点)',
+      desc: '将“单点”或“长按”设置为打开“自动记账”快捷指令。',
+      steps: ['设置 > 辅助功能 > 触控 > 辅助触控', '自定义操作 > 选择“自动记账”快捷指令'],
+      recommended: true,
+      icon: LucideIcons.CircleDot
+    },
+    {
+      id: 'shortcuts',
+      title: 'Siri / 快捷指令',
+      desc: '通过语音“嘿 Siri，记账”或主屏幕图标快速启动。',
+      steps: ['打开“快捷指令” App', '创建新指令 > 添加动作“打开 叽叽记账”', '设置运行参数为“AutoCapture”'],
+      recommended: false,
+      icon: LucideIcons.Zap
+    }
+  ];
+
+  return (
+    <div className="pt-28 pb-48 px-6 max-w-2xl mx-auto space-y-8">
+      <header className="space-y-2">
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <button onClick={onBack} className="p-2 -ml-2 hover:bg-surface-container rounded-full transition-colors">
+              <LucideIcons.ArrowLeft size={24} />
+            </button>
+          )}
+          <h2 className="text-2xl font-headline font-bold text-on-surface">自动记账设置</h2>
+        </div>
+        <p className="text-sm text-on-surface-variant/60 font-medium">配置系统触发方式，实现支付后“一触即发”</p>
+      </header>
+
+      {/* Workflow Explanation */}
+      <section className="bg-primary/5 p-6 rounded-[2.5rem] border border-primary/10 space-y-4">
+        <div className="flex items-center gap-2 text-primary">
+          <Sparkles size={18} />
+          <h3 className="text-sm font-bold">触发后会发生什么？</h3>
+        </div>
+        <div className="flex justify-between items-center px-2">
+          {[
+            { icon: LucideIcons.Zap, label: '系统触发' },
+            { icon: LucideIcons.ScanLine, label: 'AI 识别' },
+            { icon: LucideIcons.CheckCircle2, label: '一键确认' }
+          ].map((item, i) => (
+            <React.Fragment key={i}>
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-primary shadow-sm">
+                  <item.icon size={18} />
+                </div>
+                <span className="text-[10px] font-bold text-primary/60">{item.label}</span>
+              </div>
+              {i < 2 && <LucideIcons.ChevronRight size={14} className="text-primary/20" />}
+            </React.Fragment>
+          ))}
+        </div>
+        <p className="text-[10px] text-primary/60 leading-relaxed text-center font-medium px-4">
+          触发后，App 会直接进入识别流程，自动预填金额与分类，你只需最后点一下确认。
+        </p>
+      </section>
+
+      <div className="space-y-6">
+        <h3 className="text-xs font-bold text-on-surface-variant/40 uppercase tracking-widest px-2">选择触发方式</h3>
+        {settings.map((item) => (
+          <div key={item.id} className="bg-white p-6 rounded-[2.5rem] border border-outline-variant/10 shadow-[0_8px_30px_rgb(0,0,0,0.02)] space-y-5">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-primary/5 rounded-2xl flex items-center justify-center text-primary">
+                  <item.icon size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-on-surface">{item.title}</h3>
+                    {item.recommended && (
+                      <span className="px-2 py-0.5 bg-secondary/10 text-secondary text-[8px] font-black uppercase tracking-widest rounded-full">推荐</span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-on-surface-variant/60 font-medium mt-0.5">{item.desc}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-widest">设置步骤</p>
+              <div className="space-y-2">
+                {item.steps.map((step, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <div className="w-4 h-4 rounded-full bg-surface-container-highest flex items-center justify-center text-[8px] font-bold text-on-surface-variant/60 shrink-0 mt-0.5">{i + 1}</div>
+                    <p className="text-xs text-on-surface-variant/70 leading-relaxed">{step}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button className="flex-1 py-3 bg-surface-container-low text-primary text-xs font-bold rounded-2xl active:scale-95 transition-all flex items-center justify-center gap-2">
+                <LucideIcons.BookOpen size={14} />
+                查看教程
+              </button>
+              <button className="flex-1 py-3 bg-primary/10 text-primary text-xs font-bold rounded-2xl active:scale-95 transition-all flex items-center justify-center gap-2">
+                <LucideIcons.Play size={14} />
+                测试触发
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="p-6 bg-surface-container-low rounded-[2.5rem] border border-outline-variant/5 space-y-3">
+        <div className="flex items-center gap-2 text-on-surface-variant/60">
+          <LucideIcons.HelpCircle size={16} />
+          <h4 className="text-xs font-bold">常见问题</h4>
+        </div>
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <p className="text-xs font-bold text-on-surface">为什么需要手动配置？</p>
+            <p className="text-[10px] text-on-surface-variant/60 leading-relaxed">由于 iOS 系统安全限制，App 无法在后台监听支付动作。通过“轻点背面”等系统级触发，是目前最合规且高效的落地路径。</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs font-bold text-on-surface">识别失败了怎么办？</p>
+            <p className="text-[10px] text-on-surface-variant/60 leading-relaxed">如果自动触发识别不理想，您可以随时回到首页使用“截图导入”功能手动选择图片识别。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const CategoryIcon = ({ icon, size = 24, className }: { icon: string, size?: number, className?: string }) => {
   const icons: Record<string, any> = {
@@ -283,6 +682,7 @@ const Sidebar = ({ isOpen, onClose, onNavigate, activeTab, userName, userAvatar,
     { id: 'overview', label: '首页概览', icon: LayoutGrid },
     { id: 'bills', label: '账单明细', icon: ReceiptText },
     { id: 'analysis', label: '分析报告', icon: BarChart3 },
+    { id: 'auto-capture-settings', label: '自动记账', icon: Sparkles },
     { id: 'profile', label: '个人中心', icon: User },
   ];
 
@@ -647,6 +1047,37 @@ const TransactionDetailModal = ({
                 {transaction.status === 'confirmed' ? '已入账' : '待确认'}
               </span>
             </div>
+
+            {transaction.source && (
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">记账来源</span>
+                <div className="flex items-center gap-2">
+                  <Sparkles size={12} className="text-primary" />
+                  <span className="text-xs font-bold text-on-surface">
+                    {transaction.source.type === 'screenshot' ? '截图识别' : 
+                     transaction.source.type === 'share' ? '分享导入' : 
+                     transaction.source.type === 'shortcut' ? '快捷指令' : '手动输入'}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {transaction.source?.imageUrl && (
+              <div className="space-y-3">
+                <span className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">原始证据</span>
+                <div className="relative aspect-video rounded-2xl overflow-hidden border border-outline-variant/10 group">
+                  <img 
+                    src={transaction.source.imageUrl} 
+                    alt="Source Evidence" 
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button className="px-4 py-2 bg-white/90 backdrop-blur-md rounded-full text-[10px] font-bold text-on-surface shadow-lg">查看原图</button>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="flex justify-between items-center">
               <span 
                 onClick={openDatePicker}
@@ -1403,97 +1834,100 @@ const BillsScreen = ({
       </AnimatePresence>
 
       {/* 1. Page Header */}
-      <div className="space-y-4 px-2">
-        <div className="flex justify-between items-start">
-          <div className="space-y-1">
-            <h2 className="text-3xl font-headline font-extrabold text-on-surface tracking-tight transition-all duration-500">
-              {getTitle()}
-            </h2>
-            <p className="text-xs text-on-surface-variant/60 font-medium tracking-wide">
-              {getSubtitle()}
-            </p>
-          </div>
-          <button 
-            onClick={() => setShowSearchOverlay(true)}
-            className="p-3 bg-surface-container-low rounded-2xl border border-outline-variant/10 shadow-sm text-primary hover:bg-surface-container-highest transition-all active:scale-90"
-          >
-            <Search size={24} />
-          </button>
-        </div>
+      <div className="flex justify-between items-center px-2">
+        <h2 className="text-2xl font-headline font-bold text-on-surface tracking-tight">
+          账单明细
+        </h2>
+        <button 
+          onClick={() => setShowSearchOverlay(true)}
+          className="p-3 bg-surface-container-low rounded-2xl border border-outline-variant/10 shadow-sm text-primary hover:bg-surface-container-highest transition-all active:scale-90"
+        >
+          <Search size={22} />
+        </button>
       </div>
 
-      {/* 2. Stats Cards */}
-      <section className="bg-surface-container-low rounded-[2.5rem] p-8 space-y-6 shadow-sm border border-outline-variant/10 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl" />
-        <div className="text-center space-y-1 relative z-10">
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-on-surface-variant/60">{getStatsLabel()}总支出</p>
-          <h2 className="text-5xl font-headline font-black tracking-tighter text-primary">¥{formatAmount(stats.expense)}</h2>
-        </div>
-        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-outline-variant/20 relative z-10">
-          <div className="text-center space-y-1 border-r border-outline-variant/20">
-            <p className="text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-widest">{getStatsLabel()}收入</p>
-            <p className="text-xl font-bold text-secondary">¥{formatAmount(stats.income)}</p>
-          </div>
-          <div className="text-center space-y-1">
-            <p className="text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-widest">预算剩余</p>
-            <p className="text-xl font-bold text-on-surface">¥{formatAmount(budget - stats.expense)}</p>
-          </div>
-        </div>
-      </section>
-
-      {/* 3. Combined Time Navigator & Range Selector */}
-      <div className="bg-surface-container-low rounded-[2rem] border border-outline-variant/10 shadow-sm overflow-hidden py-1">
-        <div className="flex items-center justify-between p-1">
+      {/* 2. Unified Overview Card (Time + Stats) */}
+      <section className="bg-white rounded-[2.5rem] p-6 space-y-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-outline-variant/5 relative overflow-hidden">
+        {/* Date Navigator */}
+        <div className="flex items-center justify-between px-1">
           <button 
             onClick={() => handleNavigate(-1)} 
-            className="p-3 hover:bg-surface-container-highest rounded-xl transition-all active:scale-90 text-primary"
+            className="p-2.5 hover:bg-surface-container-low rounded-xl transition-all active:scale-90 text-primary/60 hover:text-primary"
           >
             <ChevronLeft size={20} />
           </button>
-          <div className="flex flex-col items-center">
+          <div className="text-center">
             <span className="text-sm font-black text-on-surface tracking-tight">
               {getTimeNavigatorLabel()}
             </span>
           </div>
           <button 
             onClick={() => handleNavigate(1)} 
-            className="p-3 hover:bg-surface-container-highest rounded-xl transition-all active:scale-90 text-primary"
+            className="p-2.5 hover:bg-surface-container-low rounded-xl transition-all active:scale-90 text-primary/60 hover:text-primary"
           >
             <ChevronRight size={20} />
           </button>
         </div>
-        
-        <div className="h-px bg-outline-variant/5 mx-4" />
 
-        <div className="p-1">
-          <div className="flex w-full">
-            {(['day', 'week', 'month', 'year'] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => {
-                  setViewMode(mode);
-                  setSelectedDate(new Date());
-                }}
-                className={cn(
-                  "flex-1 px-4 py-2.5 rounded-[1.5rem] text-[11px] font-bold transition-all duration-300 relative",
-                  viewMode === mode 
-                    ? "text-primary z-10" 
-                    : "text-on-surface-variant/40 hover:text-on-surface hover:bg-surface-container-highest/30"
-                )}
-              >
+        {/* Time Mode Switcher (Segmented Control) */}
+        <div className="bg-surface-container-low p-1 rounded-2xl flex gap-1 border border-outline-variant/5">
+          {(['day', 'week', 'month', 'year'] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => {
+                setViewMode(mode);
+                setSelectedDate(new Date());
+              }}
+              className={cn(
+                "flex-1 py-2 rounded-xl text-[11px] font-bold transition-all duration-300 relative",
+                viewMode === mode 
+                  ? "text-on-surface" 
+                  : "text-on-surface-variant/40 hover:text-on-surface"
+              )}
+            >
+              <span className="relative z-10">
                 {mode === 'day' ? '按天' : mode === 'week' ? '按周' : mode === 'month' ? '按月' : '按年'}
-                {viewMode === mode && (
-                  <motion.div 
-                    layoutId="activeTab"
-                    className="absolute inset-0 bg-white rounded-[1.5rem] -z-10 shadow-sm border border-outline-variant/10"
-                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                  />
-                )}
-              </button>
-            ))}
+              </span>
+              {viewMode === mode && (
+                <motion.div 
+                  layoutId="activeTab"
+                  className="absolute inset-0 bg-white rounded-xl shadow-sm border border-outline-variant/10"
+                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Stats Display */}
+        <div className="pt-2 space-y-5">
+          <div className="text-center space-y-1">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-on-surface-variant/30">
+              {getStatsLabel()}总支出
+            </p>
+            <div className="flex items-baseline justify-center gap-1">
+              <span className="text-sm font-bold text-on-surface/40">¥</span>
+              <h2 className="text-4xl font-headline font-black tracking-tighter text-on-surface">
+                {formatAmount(stats.expense)}
+              </h2>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 pt-5 border-t border-outline-variant/5">
+            <div className="text-center space-y-1 border-r border-outline-variant/5">
+              <p className="text-[10px] font-bold text-on-surface-variant/30 uppercase tracking-widest">{getStatsLabel()}收入</p>
+              <p className="text-lg font-bold text-secondary">¥{formatAmount(stats.income)}</p>
+            </div>
+            <div className="text-center space-y-1">
+              <p className="text-[10px] font-bold text-on-surface-variant/30 uppercase tracking-widest">预算剩余</p>
+              <p className="text-lg font-bold text-on-surface">¥{formatAmount(budget - stats.expense)}</p>
+            </div>
           </div>
         </div>
-      </div>
+        
+        {/* Subtle background decoration */}
+        <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full -mr-12 -mt-12 blur-2xl pointer-events-none" />
+      </section>
 
       {/* 4. Filters */}
       <div className="space-y-6">
@@ -3089,27 +3523,18 @@ const ScreenshotModal = ({ onClose, onSave, categories }: { onClose: () => void,
     setIsScanning(true);
     setError(null);
     try {
-      const response = await fetch("/api/recognize-receipt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: base64Data }),
-      });
-
-      if (!response.ok) {
-        throw new Error("截图识别失败，请尝试手动输入。");
-      }
-
-      const receiptData = await response.json();
+      // Use Gemini AI for real recognition
+      const parsed = await parseBillFromImage(base64Data, "image/png");
       
-      setTitle(receiptData.merchant || receiptData.note || '未命名商户');
-      setAmount(receiptData.amount?.toString() || '');
-      setType(receiptData.type || 'expense');
+      setTitle(parsed.title || '未命名商户');
+      setAmount(parsed.amount?.toString() || '');
+      setType(parsed.type || 'expense');
       
-      const recognizedCat = categories.find(c => c.id === receiptData.category);
+      const recognizedCat = categories.find(c => c.id === parsed.category);
       setSelectedCategory(recognizedCat ? recognizedCat.id : 'other');
       
-      if (receiptData.time) {
-        const parsedDate = new Date(receiptData.time);
+      if (parsed.date) {
+        const parsedDate = new Date(parsed.date);
         if (!isNaN(parsedDate.getTime())) {
           setDate(parsedDate);
         }
@@ -3141,7 +3566,12 @@ const ScreenshotModal = ({ onClose, onSave, categories }: { onClose: () => void,
       category: selectedCategory,
       type,
       status: 'confirmed',
-      note: '通过截图识别导入'
+      note: '通过截图识别导入',
+      source: {
+        type: 'screenshot',
+        imageUrl: previewUrl || undefined,
+        parsedAt: new Date(),
+      }
     });
     onClose();
   };
@@ -3521,6 +3951,21 @@ function AppContent() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Unified Entry Point for Auto Capture
+  const openAutoCapture = (data?: { type: 'screenshot' | 'share' | 'shortcut', content?: string }) => {
+    setActiveTab('auto-capture-usage');
+    if (data) {
+      // Handle incoming data if needed (e.g. pre-fill content)
+      console.log("Triggered Auto Capture with data:", data);
+    }
+  };
+
+  // Expose to window for external triggers (Shortcuts, etc.)
+  useEffect(() => {
+    (window as any).openAutoCapture = openAutoCapture;
+    return () => { delete (window as any).openAutoCapture; };
+  }, []);
   const [billsFilter, setBillsFilter] = useState<{ search?: string, category?: string }>({});
   const [modal, setModal] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -3542,6 +3987,11 @@ function AppContent() {
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [successOverlay, setSuccessOverlay] = useState<{ open: boolean; type: 'saving' | 'expense' }>({ open: false, type: 'expense' });
+
+  // Clear error when switching login modes
+  useEffect(() => {
+    setLoginError(null);
+  }, [loginMode]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -3600,6 +4050,10 @@ function AppContent() {
       await signInWithPopup(auth, provider);
     } catch (error: any) {
       console.error("Login failed:", error);
+      if (error.code === 'auth/popup-closed-by-user') {
+        // User cancelled, don't show error
+        return;
+      }
       let message = error.message || "登录失败，请重试。";
       if (error.code === 'auth/popup-blocked') {
         message = "登录窗口被浏览器拦截，请允许弹出窗口后重试。";
@@ -3772,12 +4226,22 @@ function AppContent() {
   const addTransaction = async (transaction: Omit<Transaction, 'id'>) => {
     if (!user) return;
     try {
-      await addDoc(collection(db, 'bills'), {
+      const transactionData: any = {
         ...transaction,
         uid: user.uid,
         date: Timestamp.fromDate(transaction.date),
         createdAt: serverTimestamp()
-      });
+      };
+
+      // Handle source field for Firestore
+      if (transaction.source && transaction.source.parsedAt) {
+        transactionData.source = {
+          ...transaction.source,
+          parsedAt: Timestamp.fromDate(transaction.source.parsedAt)
+        };
+      }
+
+      await addDoc(collection(db, 'bills'), transactionData);
       // Trigger success animation
       setSuccessOverlay({ open: true, type: transaction.type === 'income' ? 'saving' : 'expense' });
     } catch (error) {
@@ -3994,7 +4458,10 @@ function AppContent() {
                     <div className="space-y-2">
                       <div className="flex items-center justify-between px-1">
                         <label className="text-xs font-bold text-on-surface-variant">验证码</label>
-                        <button type="button" onClick={() => setIsVerifying(false)} className="text-xs text-primary font-bold">修改手机号</button>
+                        <button type="button" onClick={() => {
+                          setIsVerifying(false);
+                          setLoginError(null);
+                        }} className="text-xs text-primary font-bold">修改手机号</button>
                       </div>
                       <div className="relative">
                         <CheckCircle2 className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40" size={18} />
@@ -4184,9 +4651,18 @@ function AppContent() {
                 />
               </motion.div>
             )}
-            {activeTab === 'analysis' && (
-              <motion.div key="analysis" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
-                <AnalysisScreen transactions={transactions} onNavigateToBills={handleNavigateToBills} categories={categories} />
+            {activeTab === 'auto-capture-settings' && (
+              <motion.div key="auto-capture-settings" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
+                <AutoCaptureSettingsScreen />
+              </motion.div>
+            )}
+            {activeTab === 'auto-capture-usage' && (
+              <motion.div key="auto-capture-usage" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
+                <AutoCaptureScreen 
+                  onSave={addTransaction} 
+                  categories={categories} 
+                  onNavigateToSettings={() => setActiveTab('auto-capture-settings')}
+                />
               </motion.div>
             )}
             {activeTab === 'profile' && (

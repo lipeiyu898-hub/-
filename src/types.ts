@@ -9,6 +9,12 @@ export interface Transaction {
   date: Date;
   status: 'pending' | 'confirmed';
   note?: string;
+  source?: {
+    type: 'screenshot' | 'share' | 'shortcut' | 'manual';
+    imageUrl?: string;
+    rawText?: string;
+    parsedAt?: Date;
+  };
 }
 
 export interface Category {
