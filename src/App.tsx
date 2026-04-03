@@ -3170,10 +3170,10 @@ const VoiceModal = ({ onClose, onSave, categories, uid }: { onClose: () => void,
 
   const startRecording = async () => {
     try {
+      setError(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       setPermissionStatus('granted');
-      setError(null);
       setDetectedData(null);
       setTranscript('');
       
@@ -3201,11 +3201,11 @@ const VoiceModal = ({ onClose, onSave, categories, uid }: { onClose: () => void,
       setIsRecording(true);
     } catch (err: any) {
       console.error("Microphone access error:", err);
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.message === 'Permission denied') {
         setPermissionStatus('denied');
-        setError("麦克风权限被拒绝，请在浏览器设置中开启。");
+        setError("麦克风权限被拒绝。请点击浏览器地址栏左侧的图标，允许本页面访问麦克风。");
       } else {
-        setError("无法访问麦克风，请检查设备连接。");
+        setError("无法访问麦克风，请检查设备连接或浏览器设置。");
       }
       setIsRecording(false);
     }
@@ -3360,13 +3360,13 @@ const VoiceModal = ({ onClose, onSave, categories, uid }: { onClose: () => void,
           </AnimatePresence>
           
           <button 
-            onClick={status === 'recording' ? stopRecording : status === 'completed' ? startRecording : undefined}
+            onClick={status === 'recording' ? stopRecording : startRecording}
             disabled={status === 'identifying'}
             className={cn(
               "relative w-24 h-24 rounded-full shadow-2xl flex items-center justify-center transition-all duration-500 active:scale-95",
               status === 'recording' ? "bg-primary text-white scale-110" : 
               status === 'completed' ? "bg-surface-container-highest text-primary" :
-              "bg-surface-container-highest text-on-surface-variant/20"
+              "bg-surface-container-highest text-primary"
             )}
           >
             {status === 'recording' ? (
