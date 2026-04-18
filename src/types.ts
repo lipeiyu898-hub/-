@@ -10,10 +10,11 @@ export interface Transaction {
   status: 'pending' | 'confirmed';
   note?: string;
   source?: {
-    type: 'screenshot' | 'share' | 'shortcut' | 'manual';
+    type: 'screenshot' | 'share' | 'shortcut' | 'manual' | 'voice' | 'system_intent';
     imageUrl?: string;
     rawText?: string;
     parsedAt?: Date;
+    intentId?: string;
   };
 }
 

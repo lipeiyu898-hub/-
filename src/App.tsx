@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { 
   Menu, 
@@ -90,7 +90,8 @@ import {
   RecaptchaVerifier,
   signInWithPhoneNumber,
   ConfirmationResult,
-  updateProfile
+  updateProfile,
+  signInWithCustomToken
 } from 'firebase/auth';
 import { 
   collection, 
@@ -428,31 +429,244 @@ const AutoCaptureScreen = ({
   );
 };
 
-const AutoCaptureSettingsScreen = ({ onBack }: { onBack?: () => void }) => {
+interface AppIntent {
+  id: string;
+  label: string;
+  source: 'back-tap' | 'assistive-touch' | 'shortcuts' | 'voice' | 'deep-link';
+  mode: 'auto' | 'manual' | 'voice';
+  targetType?: 'expense' | 'income';
+}
+
+const AutoCaptureLandingPage = ({ 
+  intent, 
+  onClose,
+  onAction
+}: { 
+  intent: AppIntent, 
+  onClose: () => void,
+  onAction: (mode: 'voice' | 'screenshot' | 'manual') => void
+}) => {
+  return (
+    <div className="pt-28 pb-48 px-6 max-w-2xl mx-auto space-y-10">
+      <header className="flex flex-col items-center text-center space-y-4">
+        <div className="w-24 h-24 bg-primary/10 rounded-[2.5rem] flex items-center justify-center text-primary shadow-sm ring-4 ring-primary/5">
+          <Sparkles size={40} />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-3xl font-headline font-black text-on-surface tracking-tight">
+            已通过 {intent.label} 唤起
+          </h2>
+          <p className="text-sm text-on-surface-variant/60 font-medium px-4 leading-relaxed">
+            我是小叽，已经准备好帮您快速记账了。请选择您想使用的方式：
+          </p>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 gap-4">
+        <button 
+          onClick={() => onAction('voice')}
+          className="group relative bg-white p-6 rounded-[2.5rem] border border-outline-variant/10 shadow-[0_8px_30px_rgb(0,0,0,0.02)] flex items-center gap-5 active:scale-95 transition-all overflow-hidden"
+        >
+          <div className="absolute inset-0 bg-secondary/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="w-16 h-16 bg-secondary/10 rounded-2xl flex items-center justify-center text-secondary relative z-10">
+            <Mic size={32} />
+          </div>
+          <div className="text-left relative z-10">
+            <h3 className="text-lg font-bold text-on-surface">语音记账</h3>
+            <p className="text-xs text-on-surface-variant/60 font-medium">适合支付完成后，直接开口说一句</p>
+          </div>
+          <LucideIcons.ChevronRight className="ml-auto text-on-surface-variant/20" />
+        </button>
+
+        <button 
+          onClick={() => onAction('screenshot')}
+          className="group relative bg-white p-6 rounded-[2.5rem] border border-outline-variant/10 shadow-[0_8px_30px_rgb(0,0,0,0.02)] flex items-center gap-5 active:scale-95 transition-all overflow-hidden"
+        >
+          <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center text-primary relative z-10">
+            <LucideIcons.ScanLine size={32} />
+          </div>
+          <div className="text-left relative z-10">
+            <h3 className="text-lg font-bold text-on-surface">截图识别</h3>
+            <p className="text-xs text-on-surface-variant/60 font-medium">适合刚截取了支付成功页面的情况</p>
+          </div>
+          <LucideIcons.ChevronRight className="ml-auto text-on-surface-variant/20" />
+        </button>
+
+        <button 
+          onClick={() => onAction('manual')}
+          className="group relative bg-white p-6 rounded-[2.5rem] border border-outline-variant/10 shadow-[0_8px_30px_rgb(0,0,0,0.02)] flex items-center gap-5 active:scale-95 transition-all overflow-hidden"
+        >
+          <div className="absolute inset-0 bg-surface-container-highest/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="w-16 h-16 bg-surface-container-highest rounded-2xl flex items-center justify-center text-on-surface-variant relative z-10">
+            <LucideIcons.Keyboard size={32} />
+          </div>
+          <div className="text-left relative z-10">
+            <h3 className="text-lg font-bold text-on-surface">手动输入</h3>
+            <p className="text-xs text-on-surface-variant/60 font-medium">如果都不方便，可以进入标准记账页</p>
+          </div>
+          <LucideIcons.ChevronRight className="ml-auto text-on-surface-variant/20" />
+        </button>
+      </div>
+
+      <div className="pt-8 flex justify-center">
+        <button 
+          onClick={onClose}
+          className="text-sm font-bold text-on-surface-variant/40 hover:text-on-surface-variant transition-colors"
+        >
+          暂时不需要，回首页
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const TutorialModal = ({ 
+  type, 
+  onClose 
+}: { 
+  type: 'back-tap' | 'assistive-touch' | 'shortcuts', 
+  onClose: () => void 
+}) => {
+  const content = {
+    'back-tap': {
+      title: '轻点背面教程',
+      desc: '利用 iPhone 的硬件传感器，通过敲击手机背部两下快速触发记账流程。',
+      bg: 'bg-primary/5',
+      accent: 'text-primary',
+      steps: [
+        { title: '打开系统设置', desc: '进入 iOS “设置” > “辅助功能”' },
+        { title: '进入触控设置', desc: '点击“触控” > 拉到最底部选择“轻点背面”' },
+        { title: '绑定动作', desc: '选择“轻点两下”，在列表下方找到“叽叽记账”生成的快捷指令动作。' },
+        { title: '完成配置', desc: '现在，在任何手机页面（包括微信付款成功的页面），轻轻敲击背面两下即可唤起记账。' }
+      ]
+    },
+    'assistive-touch': {
+      title: '辅助触控教程',
+      desc: '通过屏幕上的“悬浮球”快速启动，单手操作最方便的选择。',
+      bg: 'bg-secondary/5',
+      accent: 'text-secondary',
+      steps: [
+        { title: '开启辅助触控', desc: '进入“设置” > “辅助功能” > “触控” > “辅助触控”并开启。' },
+        { title: '自定义操作', desc: '在“自定操作”中选择“单点”或“长按”。' },
+        { title: '关联动作', desc: '在操作列表中找到“记录一笔账单”。' },
+        { title: '立即体验', desc: '支付后点击一下屏幕上的小白点，直达记账中心。' }
+      ]
+    },
+    'shortcuts': {
+      title: 'Siri 与指令教程',
+      desc: '无需动手的黑科技，对着手机说句话，自动预填信息。',
+      bg: 'bg-tertiary/5',
+      accent: 'text-tertiary',
+      steps: [
+        { title: '查看快捷指令', desc: '打开 iOS 自带的“快捷指令” App。' },
+        { title: 'App 快捷操作', desc: '在“App”标签页下找到“叽叽记账”。' },
+        { title: '使用 Siri', desc: '您可以直接对 Siri 说：“嘿 Siri，用叽叽记账记录一笔”。' },
+        { title: '主屏幕入口', desc: '您可以将这些快捷指令添加到主屏幕，作为快速记账图标。' }
+      ]
+    }
+  }[type];
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 100 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 100 }}
+      className="fixed inset-0 z-[150] bg-white flex flex-col md:rounded-t-[3.5rem] overflow-hidden"
+    >
+      <header className="px-6 h-16 flex items-center justify-between border-b border-outline-variant/5">
+        <h2 className="font-headline font-bold text-lg">{content.title}</h2>
+        <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container hover:bg-surface-container-highest transition-colors">
+          <LucideIcons.X size={20} />
+        </button>
+      </header>
+
+      <div className="flex-1 overflow-y-auto px-6 py-10 space-y-12">
+        <section className={`p-8 rounded-[2.5rem] ${content.bg} border border-outline-variant/10 space-y-4`}>
+          <p className="text-sm font-medium leading-relaxed text-on-surface-variant/80">
+            {content.desc}
+          </p>
+          <div className="pt-2">
+            <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 bg-white rounded-full ${content.accent} shadow-sm`}>实现原理：系统快捷指令转发</span>
+          </div>
+        </section>
+
+        <section className="space-y-8">
+          <h3 className="text-xs font-black uppercase tracking-widest text-on-surface-variant/40 px-2">设置步骤</h3>
+          <div className="space-y-10 relative">
+            <div className="absolute left-6 top-8 bottom-8 w-px bg-outline-variant/20" />
+            {content.steps.map((step, i) => (
+              <div key={i} className="flex gap-6 relative">
+                <div className={`w-12 h-12 rounded-2xl ${content.bg} flex items-center justify-center ${content.accent} font-headline font-black text-lg shadow-sm shrink-0 z-10`}>
+                  {i + 1}
+                </div>
+                <div className="pt-1.5 space-y-1">
+                  <h4 className="font-bold text-on-surface">{step.title}</h4>
+                  <p className="text-xs text-on-surface-variant/60 leading-relaxed">{step.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="bg-surface-container/50 p-6 rounded-[2rem] flex items-center gap-4">
+          <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-secondary">
+            <LucideIcons.Info size={18} />
+          </div>
+          <p className="text-[10px] text-on-surface-variant/60 font-medium">
+            提示：iOS 系统版本需在 16.0 以上以获得最佳的 App Shortcuts 支持。
+          </p>
+        </section>
+      </div>
+
+      <div className="p-6 border-t border-outline-variant/5">
+        <button 
+          onClick={onClose}
+          className="w-full py-5 bg-primary text-white rounded-[2rem] font-black text-sm shadow-xl shadow-primary/20 active:scale-95 transition-transform"
+        >
+          我已了解
+        </button>
+      </div>
+    </motion.div>
+  );
+};
+
+const AutoCaptureSettingsScreen = ({ 
+  onBack,
+  onTest,
+  onShowTutorial
+}: { 
+  onBack?: () => void,
+  onTest: (intent: AppIntent) => void,
+  onShowTutorial: (type: 'back-tap' | 'assistive-touch' | 'shortcuts') => void
+}) => {
   const settings = [
     {
-      id: 'back-tap',
+      id: 'back-tap' as const,
       title: '轻点背面 (推荐)',
       desc: '最适合 iPhone 的触发方式。支付完成后轻点手机背面两下，立即弹出记账确认。',
       steps: ['设置 > 辅助功能 > 触控 > 轻点背面', '选择“轻点两下” > 绑定“自动记账”快捷指令'],
       recommended: true,
-      icon: LucideIcons.Smartphone
+      icon: LucideIcons.Smartphone,
+      intent: { id: 'back-tap-intent', label: '轻点背面', source: 'back-tap', mode: 'auto' } as AppIntent
     },
     {
-      id: 'assistive-touch',
+      id: 'assistive-touch' as const,
       title: '辅助触控 (小白点)',
       desc: '将“单点”或“长按”设置为打开“自动记账”快捷指令。',
       steps: ['设置 > 辅助功能 > 触控 > 辅助触控', '自定义操作 > 选择“自动记账”快捷指令'],
       recommended: true,
-      icon: LucideIcons.CircleDot
+      icon: LucideIcons.CircleDot,
+      intent: { id: 'assistive-touch-intent', label: '辅助触控', source: 'assistive-touch', mode: 'auto' } as AppIntent
     },
     {
-      id: 'shortcuts',
+      id: 'shortcuts' as const,
       title: 'Siri / 快捷指令',
       desc: '通过语音“嘿 Siri，记账”或主屏幕图标快速启动。',
       steps: ['打开“快捷指令” App', '创建新指令 > 添加动作“打开 叽叽记账”', '设置运行参数为“AutoCapture”'],
       recommended: false,
-      icon: LucideIcons.Zap
+      icon: LucideIcons.Zap,
+      intent: { id: 'voice-shortcut-intent', label: 'Siri 语音', source: 'voice', mode: 'voice' } as AppIntent
     }
   ];
 
@@ -532,11 +746,17 @@ const AutoCaptureSettingsScreen = ({ onBack }: { onBack?: () => void }) => {
             </div>
 
             <div className="flex gap-3">
-              <button className="flex-1 py-3 bg-surface-container-low text-primary text-xs font-bold rounded-2xl active:scale-95 transition-all flex items-center justify-center gap-2">
+              <button 
+                onClick={() => onShowTutorial(item.id)}
+                className="flex-1 py-3 bg-surface-container-low text-primary text-xs font-bold rounded-2xl active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
                 <LucideIcons.BookOpen size={14} />
                 查看教程
               </button>
-              <button className="flex-1 py-3 bg-primary/10 text-primary text-xs font-bold rounded-2xl active:scale-95 transition-all flex items-center justify-center gap-2">
+              <button 
+                onClick={() => onTest(item.intent)}
+                className="flex-1 py-3 bg-primary/10 text-primary text-xs font-bold rounded-2xl active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
                 <LucideIcons.Play size={14} />
                 测试触发
               </button>
@@ -2083,7 +2303,8 @@ const ProfileScreen = ({
   budget,
   setBudget,
   onLogout,
-  onSubPageToggle
+  onSubPageToggle,
+  onNavigate
 }: { 
   categories: Category[], 
   setCategories: React.Dispatch<React.SetStateAction<Category[]>>,
@@ -2095,7 +2316,8 @@ const ProfileScreen = ({
   budget: number,
   setBudget: (budget: number) => void,
   onLogout: () => void,
-  onSubPageToggle: (active: boolean) => void
+  onSubPageToggle: (active: boolean) => void,
+  onNavigate: (tab: string) => void
 }) => {
   const [activeSubPage, setActiveSubPage] = useState<string | null>(null);
 
@@ -2767,6 +2989,20 @@ const ProfileScreen = ({
 
       {/* Settings List - Grouped Rows Style */}
       <div className="space-y-8">
+        <div className="space-y-3">
+          <h4 className="px-2 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">AI 自动化</h4>
+          <div className="bg-surface-container-low rounded-[2rem] overflow-hidden border border-outline-variant/10">
+            <SettingsRow 
+              icon={Sparkles} 
+              label="自动记账" 
+              sub="配置系统快捷触发方式" 
+              onClick={() => onNavigate('auto-capture-settings')} 
+              iconColor="text-primary"
+              iconBg="bg-primary/10"
+            />
+          </div>
+        </div>
+
         <div className="space-y-3">
           <h4 className="px-2 text-[10px] font-black uppercase tracking-widest text-on-surface-variant/40">记账设置</h4>
           <div className="bg-surface-container-low rounded-[2rem] overflow-hidden border border-outline-variant/10">
@@ -3971,6 +4207,7 @@ function AppContent() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [viewingTransaction, setViewingTransaction] = useState<Transaction | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSubPageActive, setIsSubPageActive] = useState(false);
   const [categories, setCategories] = useState<Category[]>(CATEGORIES);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budget, setBudget] = useState(5000);
@@ -3987,6 +4224,71 @@ function AppContent() {
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [successOverlay, setSuccessOverlay] = useState<{ open: boolean; type: 'saving' | 'expense' }>({ open: false, type: 'expense' });
+
+  const [activeIntent, setActiveIntent] = useState<AppIntent | null>(null);
+  const [activeTutorial, setActiveTutorial] = useState<'back-tap' | 'assistive-touch' | 'shortcuts' | null>(null);
+
+  // Intent Lifecycle Helper
+  const triggerIntent = useCallback((intent: AppIntent) => {
+    setActiveIntent(intent);
+    setActiveTab('auto-capture-landing');
+    setIsSidebarOpen(false);
+  }, []);
+
+  // Deep Link & App Shortcuts & WeChat Callback handling
+  useEffect(() => {
+    const handleDeepLink = () => {
+      const hash = window.location.hash;
+      const urlParams = new URLSearchParams(window.location.search);
+      
+      // WeChat Login Callback: #/login-callback?token=...
+      if (hash.includes('login-callback')) {
+        const params = new URLSearchParams(hash.split('?')[1]);
+        const token = params.get('token');
+        if (token) {
+          setIsLoading(true);
+          signInWithCustomToken(auth, token)
+            .then(() => {
+              window.location.hash = ''; // Clear callback
+              setLoginMode('landing'); // Reset login UI
+            })
+            .catch(err => {
+              console.error("WeChat sign-in failed:", err);
+              setLoginError("微信登录失败，请重试。");
+            })
+            .finally(() => setIsLoading(false));
+        }
+      }
+
+      // jiji://auto-capture
+      if (hash === '#auto-capture' || hash === '#/auto-capture' || urlParams.get('intent') === 'auto-capture') {
+        triggerIntent({
+          id: 'deeplink-capture',
+          label: 'Deep Link',
+          source: 'deep-link',
+          mode: 'auto'
+        });
+        if (hash) window.location.hash = '';
+      }
+      
+      // jiji://quick-add?type=expense
+      if (hash.startsWith('#quick-add') || urlParams.get('intent') === 'quick-add') {
+        const type = (urlParams.get('type') || (hash.includes('type=') ? hash.split('type=')[1] : 'expense')) as 'expense' | 'income';
+        triggerIntent({
+          id: 'deeplink-quick-add',
+          label: `快捷添加 (${type === 'expense' ? '支出' : '收入'})`,
+          source: 'deep-link',
+          mode: 'manual',
+          targetType: type
+        });
+        if (hash) window.location.hash = '';
+      }
+    };
+
+    handleDeepLink();
+    window.addEventListener('hashchange', handleDeepLink);
+    return () => window.removeEventListener('hashchange', handleDeepLink);
+  }, [triggerIntent]);
 
   // Clear error when switching login modes
   useEffect(() => {
@@ -4278,13 +4580,14 @@ function AppContent() {
     setViewingTransaction(transaction);
   };
 
-  const [isSubPageActive, setIsSubPageActive] = useState(false);
-
   const screenTitle = useMemo(() => {
     switch (activeTab) {
-      case 'overview': return '叽叽记账';
+      case 'overview': return '首页概览';
       case 'bills': return '账单明细';
       case 'analysis': return '分析报告';
+      case 'auto-capture-settings': return '自动记账设置';
+      case 'auto-capture-usage': return '正在识别';
+      case 'auto-capture-landing': return '智能唤起';
       case 'profile': return '个人中心';
       default: return '叽叽记账';
     }
@@ -4368,8 +4671,8 @@ function AppContent() {
                 {/* Primary: WeChat */}
                 <button 
                   onClick={() => {
-                    // Mock WeChat Login
-                    setLoginError("微信登录环境初始化中，请稍后重试或使用其他方式。");
+                    // Redirect to WeChat Login
+                    window.location.href = "/api/auth/wechat/login";
                   }}
                   className="w-full py-4.5 bg-[#07C160] text-white rounded-[2rem] font-bold shadow-xl shadow-green-500/20 flex items-center justify-center gap-3 active:scale-95 transition-all"
                 >
@@ -4651,9 +4954,24 @@ function AppContent() {
                 />
               </motion.div>
             )}
+            {activeTab === 'analysis' && (
+              <motion.div key="analysis" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
+                <AnalysisScreen 
+                  transactions={transactions} 
+                  categories={categories}
+                  onNavigateToBills={(category) => {
+                    setBillsFilter({ category });
+                    setActiveTab('bills');
+                  }}
+                />
+              </motion.div>
+            )}
             {activeTab === 'auto-capture-settings' && (
               <motion.div key="auto-capture-settings" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
-                <AutoCaptureSettingsScreen />
+                <AutoCaptureSettingsScreen 
+                  onTest={triggerIntent}
+                  onShowTutorial={setActiveTutorial}
+                />
               </motion.div>
             )}
             {activeTab === 'auto-capture-usage' && (
@@ -4662,6 +4980,19 @@ function AppContent() {
                   onSave={addTransaction} 
                   categories={categories} 
                   onNavigateToSettings={() => setActiveTab('auto-capture-settings')}
+                />
+              </motion.div>
+            )}
+            {activeTab === 'auto-capture-landing' && activeIntent && (
+              <motion.div key="auto-capture-landing" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
+                <AutoCaptureLandingPage 
+                  intent={activeIntent}
+                  onClose={() => setActiveTab('overview')}
+                  onAction={(mode) => {
+                    if (mode === 'voice') setModal('voice');
+                    else if (mode === 'screenshot') setModal('screenshot');
+                    else if (mode === 'manual') setModal('manual');
+                  }}
                 />
               </motion.div>
             )}
@@ -4679,6 +5010,7 @@ function AppContent() {
                   setBudget={setBudget}
                   onLogout={handleLogout}
                   onSubPageToggle={setIsSubPageActive}
+                  onNavigate={(tab) => setActiveTab(tab)}
                 />
               </motion.div>
             )}
@@ -4771,6 +5103,13 @@ function AppContent() {
               onDelete={deleteTransaction}
               onUpdate={updateTransaction}
               categories={categories}
+            />
+          )}
+
+          {activeTutorial && (
+            <TutorialModal 
+              type={activeTutorial} 
+              onClose={() => setActiveTutorial(null)} 
             />
           )}
         </AnimatePresence>
